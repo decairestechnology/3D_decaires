@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F8FAFC;
+  --foreground: #0F172A;
+  --card: #FFFFFF;
+  --primary: #06B6D4;
+  --primary-foreground: #FFFFFF;
+  --secondary: #7C3AED;
+  --muted: #F1F5F9;
+  --muted-foreground: #64748B;
+  --accent: #E0F9FF;
+  --border: #E2E8F0;
+  --destructive: #EF4444;
+  --radius: 0.5rem;
+}
+
+[data-theme="dark"] {
+  --background: #0F172A;
+  --foreground: #F8FAFC;
+  --card: #1E293B;
+  --primary: #22D3EE;
+  --primary-foreground: #0F172A;
+  --secondary: #A78BFA;
+  --muted: #1E293B;
+  --muted-foreground: #94A3B8;
+  --accent: #164E63;
+  --border: #334155;
+  --destructive: #EF4444;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+  transition: background .2s ease, color .2s ease;
+}
+
+input, select, textarea {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.money-hidden {
+  filter: blur(5px);
+  user-select: none;
+}
