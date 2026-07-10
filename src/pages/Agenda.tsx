@@ -67,7 +67,7 @@ export function Agenda() {
     setSalvando(true)
     try {
       const payload = { data: form.data, titulo: form.titulo, descricao: form.descricao || null, tipo: form.tipo }
-      if (form.id) await api.patch(`/api/agenda/${form.id}`, payload)
+      if (form.id) await api.patch(`/api/agenda?id=${form.id}`, payload)
       else await api.post('/api/agenda', payload)
       setModalOpen(false)
       setForm(formVazio)
@@ -82,7 +82,7 @@ export function Agenda() {
 
   async function excluir(id: string) {
     try {
-      await api.del(`/api/agenda/${id}`)
+      await api.del(`/api/agenda?id=${id}`)
       setConfirmandoId(null)
       reload()
     } catch (err) {

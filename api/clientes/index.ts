@@ -16,9 +16,9 @@ function pegarId(req: VercelRequest): string | undefined {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const id = pegarId(req)
 
-  if (req.method === 'GET' && !id) {
+  if (req.method === 'GET') {
     const clientes = await sql`
-      SELECT c.id, c.nome, c.contato,
+      SELECT c.id, c.nome, c.contato, c.email, c.endereco, c.observacoes,
         COUNT(p.id)::int as pedidos,
         COALESCE(SUM(p.valor), 0) as total_gasto
       FROM clientes c
@@ -29,18 +29,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(clientes)
   }
 
-  if (req.method === 'POST' && !id) {
-    const { nome, contato } = req.body
+  if (req.method === 'POST') {
+    const { nome, contato, email, endereco, observacoes } = req.body
     const [novo] = await sql`
-      INSERT INTO clientes (nome, contato) VALUES (${nome}, ${contato}) RETURNING *
+      INSERT INTO clientes (nome, contato, email, endereco, observacoes)
+      VALUES (${nome}, ${contato}, ${email ?? null}, ${endereco ?? null}, ${observacoes ?? null})
+      RETURNING *
     `
     return res.status(201).json(novo)
   }
 
   if (req.method === 'PATCH' && id) {
-    const { nome, contato } = req.body
+    const { nome, contato, email, endereco, observacoes } = req.body
     const [atualizado] = await sql`
-      UPDATE clientes SET nome = COALESCE(${nome}, nome), contato = COALESCE(${contato}, contato)
+      UPDATE clientes SET
+        nome = COALESCE(${nome}, nome), contato = COALESCE(${contato}, contato),
+        email = COALESCE(${email}, email), endereco = COALESCE(${endereco}, endereco),
+        observacoes = COALESCE(${observacoes}, observacoes)
       WHERE id = ${id} RETURNING *
     `
     if (!atualizado) return res.status(404).json({ error: 'Cliente não encontrado' })

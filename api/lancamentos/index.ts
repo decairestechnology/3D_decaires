@@ -16,36 +16,36 @@ function pegarId(req: VercelRequest): string | undefined {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const id = pegarId(req)
 
-  if (req.method === 'GET' && !id) {
-    const equipamentos = await sql`SELECT * FROM equipamentos ORDER BY tipo, nome`
-    return res.status(200).json(equipamentos)
+  if (req.method === 'GET') {
+    const lancamentos = await sql`SELECT * FROM lancamentos_financeiros ORDER BY data DESC`
+    return res.status(200).json(lancamentos)
   }
 
-  if (req.method === 'POST' && !id) {
-    const { nome, tipo, valor, aquisicao, status } = req.body
+  if (req.method === 'POST') {
+    const { data, descricao, tipo, valor, pedido_id, categoria } = req.body
     const [novo] = await sql`
-      INSERT INTO equipamentos (nome, tipo, valor, aquisicao, status)
-      VALUES (${nome}, ${tipo}, ${valor}, ${aquisicao}, ${status ?? 'OK'})
+      INSERT INTO lancamentos_financeiros (data, descricao, tipo, valor, pedido_id, categoria)
+      VALUES (${data}, ${descricao}, ${tipo}, ${valor}, ${pedido_id ?? null}, ${categoria ?? 'outros'})
       RETURNING *
     `
     return res.status(201).json(novo)
   }
 
   if (req.method === 'PATCH' && id) {
-    const { nome, tipo, valor, aquisicao, status } = req.body
+    const { data, descricao, tipo, valor, categoria } = req.body
     const [atualizado] = await sql`
-      UPDATE equipamentos SET
-        nome = COALESCE(${nome}, nome), tipo = COALESCE(${tipo}, tipo),
-        valor = COALESCE(${valor}, valor), aquisicao = COALESCE(${aquisicao}, aquisicao),
-        status = COALESCE(${status}, status)
+      UPDATE lancamentos_financeiros SET
+        data = COALESCE(${data}, data), descricao = COALESCE(${descricao}, descricao),
+        tipo = COALESCE(${tipo}, tipo), valor = COALESCE(${valor}, valor),
+        categoria = COALESCE(${categoria}, categoria)
       WHERE id = ${id} RETURNING *
     `
-    if (!atualizado) return res.status(404).json({ error: 'Equipamento não encontrado' })
+    if (!atualizado) return res.status(404).json({ error: 'Lançamento não encontrado' })
     return res.status(200).json(atualizado)
   }
 
   if (req.method === 'DELETE' && id) {
-    await sql`DELETE FROM equipamentos WHERE id = ${id}`
+    await sql`DELETE FROM lancamentos_financeiros WHERE id = ${id}`
     return res.status(204).end()
   }
 

@@ -85,14 +85,14 @@ export function Pedidos() {
 
   async function mudarStatus(id: string, novo: StatusPedido | null) {
     if (!novo || usandoMock) return
-    await api.patch(`/api/pedidos/${id}`, { status: novo })
+    await api.patch(`/api/pedidos?id=${id}`, { status: novo })
     reload()
   }
 
   async function excluirPedido(id: string) {
     if (usandoMock) { setConfirmandoId(null); return }
     try {
-      await api.del(`/api/pedidos/${id}`)
+      await api.del(`/api/pedidos?id=${id}`)
       setConfirmandoId(null)
       reload()
     } catch (err) {
@@ -113,7 +113,7 @@ export function Pedidos() {
         prazo: form.prazo || null,
         status: form.status
       }
-      if (form.id) await api.patch(`/api/pedidos/${form.id}`, payload)
+      if (form.id) await api.patch(`/api/pedidos?id=${form.id}`, payload)
       else await api.post('/api/pedidos', payload)
       setModalOpen(false)
       setForm(formVazio)

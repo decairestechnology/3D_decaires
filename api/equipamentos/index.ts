@@ -16,35 +16,36 @@ function pegarId(req: VercelRequest): string | undefined {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const id = pegarId(req)
 
-  if (req.method === 'GET' && !id) {
-    const eventos = await sql`SELECT * FROM agenda_eventos ORDER BY data`
-    return res.status(200).json(eventos)
+  if (req.method === 'GET') {
+    const equipamentos = await sql`SELECT * FROM equipamentos ORDER BY tipo, nome`
+    return res.status(200).json(equipamentos)
   }
 
-  if (req.method === 'POST' && !id) {
-    const { data, titulo, descricao, tipo, pedido_id, equipamento_id } = req.body
+  if (req.method === 'POST') {
+    const { nome, tipo, valor, aquisicao, status } = req.body
     const [novo] = await sql`
-      INSERT INTO agenda_eventos (data, titulo, descricao, tipo, pedido_id, equipamento_id)
-      VALUES (${data}, ${titulo}, ${descricao}, ${tipo}, ${pedido_id ?? null}, ${equipamento_id ?? null})
+      INSERT INTO equipamentos (nome, tipo, valor, aquisicao, status)
+      VALUES (${nome}, ${tipo}, ${valor}, ${aquisicao}, ${status ?? 'OK'})
       RETURNING *
     `
     return res.status(201).json(novo)
   }
 
   if (req.method === 'PATCH' && id) {
-    const { data, titulo, descricao, tipo } = req.body
+    const { nome, tipo, valor, aquisicao, status } = req.body
     const [atualizado] = await sql`
-      UPDATE agenda_eventos SET
-        data = COALESCE(${data}, data), titulo = COALESCE(${titulo}, titulo),
-        descricao = COALESCE(${descricao}, descricao), tipo = COALESCE(${tipo}, tipo)
+      UPDATE equipamentos SET
+        nome = COALESCE(${nome}, nome), tipo = COALESCE(${tipo}, tipo),
+        valor = COALESCE(${valor}, valor), aquisicao = COALESCE(${aquisicao}, aquisicao),
+        status = COALESCE(${status}, status)
       WHERE id = ${id} RETURNING *
     `
-    if (!atualizado) return res.status(404).json({ error: 'Compromisso não encontrado' })
+    if (!atualizado) return res.status(404).json({ error: 'Equipamento não encontrado' })
     return res.status(200).json(atualizado)
   }
 
   if (req.method === 'DELETE' && id) {
-    await sql`DELETE FROM agenda_eventos WHERE id = ${id}`
+    await sql`DELETE FROM equipamentos WHERE id = ${id}`
     return res.status(204).end()
   }
 

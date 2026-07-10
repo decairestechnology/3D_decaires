@@ -65,7 +65,7 @@ export function Financeiro() {
         valor: Number(form.valor.replace(',', '.')) || 0,
         categoria: form.categoria
       }
-      if (form.id) await api.patch(`/api/lancamentos/${form.id}`, payload)
+      if (form.id) await api.patch(`/api/lancamentos?id=${form.id}`, payload)
       else await api.post('/api/lancamentos', payload)
       setModalOpen(false)
       setForm(formVazio)
@@ -80,7 +80,7 @@ export function Financeiro() {
 
   async function excluir(id: string) {
     try {
-      await api.del(`/api/lancamentos/${id}`)
+      await api.del(`/api/lancamentos?id=${id}`)
       setConfirmandoId(null)
       reload()
     } catch (err) {

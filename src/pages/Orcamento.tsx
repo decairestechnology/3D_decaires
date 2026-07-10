@@ -159,6 +159,11 @@ export function Orcamento() {
                   <div><Label>Tempo de impressão (h)</Label><Input value={it.horas} onChange={e => atualizarItem(it.id, 'horas', e.target.value)} /></div>
                   <div><Label>Quantidade</Label><Input value={it.quantidade} onChange={e => atualizarItem(it.id, 'quantidade', e.target.value)} /></div>
                 </div>
+                <div className="flex justify-between text-xs text-[var(--muted-foreground)] bg-[var(--muted)] rounded-lg px-3 py-2 mt-1">
+                  <span>Custo material: {formatMoney(linha?.custoMaterial ?? 0)}</span>
+                  <span>Custo energia: {formatMoney(linha?.custoEnergia ?? 0)}</span>
+                  <span>Preço/un.: {formatMoney(linha?.precoUnitario ?? 0)}</span>
+                </div>
               </Card>
             )
           })}
@@ -166,17 +171,25 @@ export function Orcamento() {
         </div>
 
         <Card className="flex-1 min-w-[280px] sticky top-4">
-          <div className="font-bold mb-2.5">Resumo do orçamento</div>
+          <div className="font-bold mb-2.5">Resumo do orçamento (sua visão)</div>
           {calculo.linhas.map((l, i) => (
-            <div key={l.item.id} className="flex justify-between text-[13px] py-1.5 border-b border-[var(--border)]">
-              <span>{l.item.nome || `Peça ${i + 1}`} {l.qtd > 1 ? `(x${l.qtd})` : ''}</span>
-              <span>{formatMoney(l.precoLinha)}</span>
+            <div key={l.item.id} className="text-[13px] py-1.5 border-b border-[var(--border)]">
+              <div className="flex justify-between font-semibold">
+                <span>{l.item.nome || `Peça ${i + 1}`} {l.qtd > 1 ? `(x${l.qtd})` : ''}</span>
+                <span>{formatMoney(l.precoLinha)}</span>
+              </div>
+              <div className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                custo: {formatMoney((l.custoMaterial + l.custoEnergia) * l.qtd)} · lucro: {formatMoney(l.precoLinha - (l.custoMaterial + l.custoEnergia) * l.qtd)}
+              </div>
             </div>
           ))}
           <div className="bg-[var(--accent)] rounded-xl p-4 mt-3">
             <div className="text-xs font-semibold text-[var(--muted-foreground)]">Valor total do orçamento</div>
             <div className="text-2xl font-extrabold text-[var(--secondary)]">{formatMoney(calculo.total)}</div>
-            <div className="text-xs text-[var(--muted-foreground)] mt-1">Margem de {margem}% aplicada em cada peça</div>
+            <div className="text-xs text-[var(--muted-foreground)] mt-1">
+              Custo total: {formatMoney(calculo.linhas.reduce((s, l) => s + (l.custoMaterial + l.custoEnergia) * l.qtd, 0))}
+              {' · '}Lucro estimado: {formatMoney(calculo.total - calculo.linhas.reduce((s, l) => s + (l.custoMaterial + l.custoEnergia) * l.qtd, 0))}
+            </div>
           </div>
           <Button variant="gradient" className="w-full mt-3.5" onClick={gerarPdf}><Send size={15} />Gerar orçamento PDF</Button>
           <Button variant="whatsapp" className="w-full mt-2" onClick={enviarWhatsApp}>Enviar por WhatsApp</Button>

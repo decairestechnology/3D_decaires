@@ -16,7 +16,7 @@ function pegarId(req: VercelRequest): string | undefined {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const id = pegarId(req)
 
-  if (req.method === 'GET' && !id) {
+  if (req.method === 'GET') {
     const pedidos = await sql`
       SELECT p.id, p.cliente_id, c.nome as cliente_nome, p.peca, p.material, p.valor, p.prazo, p.status
       FROM pedidos p
@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(pedidos)
   }
 
-  if (req.method === 'POST' && !id) {
+  if (req.method === 'POST') {
     const { cliente_id, peca, material, valor, prazo, status } = req.body
     const [novo] = await sql`
       INSERT INTO pedidos (cliente_id, peca, material, valor, prazo, status)
@@ -37,12 +37,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PATCH' && id) {
-    const { status, valor, prazo, peca, material } = req.body
+    const { status, valor, prazo, peca, material, cliente_id } = req.body
     const [atualizado] = await sql`
       UPDATE pedidos SET
         status = COALESCE(${status}, status), valor = COALESCE(${valor}, valor),
         prazo = COALESCE(${prazo}, prazo), peca = COALESCE(${peca}, peca),
-        material = COALESCE(${material}, material)
+        material = COALESCE(${material}, material), cliente_id = COALESCE(${cliente_id}, cliente_id)
       WHERE id = ${id} RETURNING *
     `
     if (!atualizado) return res.status(404).json({ error: 'Pedido não encontrado' })

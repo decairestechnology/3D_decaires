@@ -9,12 +9,14 @@ import { Money } from '@/components/ui/Money'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { clientes as clientesMock } from '@/data/mockData'
-import { Cliente } from '@/types'
 
 interface ClienteApiRow {
   id: string
   nome: string
   contato: string | null
+  email: string | null
+  endereco: string | null
+  observacoes: string | null
   pedidos: number
   total_gasto: string
 }
@@ -23,7 +25,7 @@ function iniciais(nome: string) {
   return nome.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()
 }
 
-const formVazio = { id: '', nome: '', contato: '' }
+const formVazio = { id: '', nome: '', contato: '', email: '', endereco: '', observacoes: '' }
 
 export function Clientes() {
   const { data, loading, error, reload } = useApi<ClienteApiRow[]>('/api/clientes', [])
@@ -33,20 +35,36 @@ export function Clientes() {
   const [form, setForm] = useState(formVazio)
 
   const usandoMock = !loading && (error || data.length === 0)
-  const clientes: Cliente[] = usandoMock
-    ? clientesMock
-    : data.map(c => ({ id: c.id, nome: c.nome, contato: c.contato ?? '—', pedidos: c.pedidos, totalGasto: Number(c.total_gasto) }))
+  const clientes = usandoMock
+    ? clientesMock.map(c => ({ ...c, email: '', endereco: '', observacoes: '' }))
+    : data.map(c => ({
+        id: c.id, nome: c.nome, contato: c.contato ?? '—', email: c.email ?? '',
+        endereco: c.endereco ?? '', observacoes: c.observacoes ?? '',
+        pedidos: c.pedidos, totalGasto: Number(c.total_gasto)
+      }))
 
   function abrirNovo() { setForm(formVazio); setModalOpen(true) }
-  function abrirEdicao(c: Cliente) { setForm({ id: c.id, nome: c.nome, contato: c.contato === '—' ? '' : c.contato }); setModalOpen(true) }
+  function abrirEdicao(c: typeof clientes[number]) {
+    setForm({
+      id: c.id, nome: c.nome, contato: c.contato === '—' ? '' : c.contato,
+      email: c.email, endereco: c.endereco, observacoes: c.observacoes
+    })
+    setModalOpen(true)
+  }
 
   async function handleSalvar(e: FormEvent) {
     e.preventDefault()
     if (!form.nome.trim()) return
     setSalvando(true)
     try {
-      const payload = { nome: form.nome, contato: form.contato || null }
-      if (form.id) await api.patch(`/api/clientes/${form.id}`, payload)
+      const payload = {
+        nome: form.nome,
+        contato: form.contato || null,
+        email: form.email || null,
+        endereco: form.endereco || null,
+        observacoes: form.observacoes || null
+      }
+      if (form.id) await api.patch(`/api/clientes?id=${form.id}`, payload)
       else await api.post('/api/clientes', payload)
       setModalOpen(false)
       setForm(formVazio)
@@ -61,7 +79,7 @@ export function Clientes() {
 
   async function excluir(id: string) {
     try {
-      await api.del(`/api/clientes/${id}`)
+      await api.del(`/api/clientes?id=${id}`)
       setConfirmandoId(null)
       reload()
     } catch (err) {
@@ -102,7 +120,10 @@ export function Clientes() {
                       {iniciais(c.nome)}
                     </div>
                   </td>
-                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{c.nome}</td>
+                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
+                    {c.nome}
+                    {c.email && <div className="text-xs text-[var(--muted-foreground)]">{c.email}</div>}
+                  </td>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{c.contato}</td>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{c.pedidos}</td>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}><Money value={c.totalGasto} /></td>
@@ -140,8 +161,14 @@ export function Clientes() {
       >
         <Label>Nome</Label>
         <Input placeholder="Nome do cliente" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
-        <Label>Contato (telefone ou email)</Label>
-        <Input placeholder="(16) 99999-9999" value={form.contato} onChange={e => setForm(f => ({ ...f, contato: e.target.value }))} />
+        <div className="grid grid-cols-2 gap-x-4">
+          <div><Label>Telefone</Label><Input placeholder="(16) 99999-9999" value={form.contato} onChange={e => setForm(f => ({ ...f, contato: e.target.value }))} /></div>
+          <div><Label>Email</Label><Input placeholder="cliente@email.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
+        </div>
+        <Label>Endereço</Label>
+        <Input placeholder="Rua, número, bairro, cidade" value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} />
+        <Label>Observações</Label>
+        <Input placeholder="Preferências, histórico, o que for útil lembrar" value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} />
       </Modal>
     </div>
   )

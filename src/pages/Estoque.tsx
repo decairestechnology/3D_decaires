@@ -80,7 +80,7 @@ export function Estoque() {
         estoque_g: Number(formMaterial.estoque_g) || 0,
         capacidade_g: Number(formMaterial.capacidade_g) || 1000
       }
-      if (formMaterial.id) await api.patch(`/api/materiais/${formMaterial.id}`, payload)
+      if (formMaterial.id) await api.patch(`/api/materiais?id=${formMaterial.id}`, payload)
       else await api.post('/api/materiais', payload)
       setModalOpen(false)
       setFormMaterial(formMaterialVazio)
@@ -105,7 +105,7 @@ export function Estoque() {
         custo_unitario: Number(formProduto.custo_unitario.replace(',', '.')) || 0,
         preco_venda: Number(formProduto.preco_venda.replace(',', '.')) || 0
       }
-      if (formProduto.id) await api.patch(`/api/produtos-prontos/${formProduto.id}`, payload)
+      if (formProduto.id) await api.patch(`/api/produtos-prontos?id=${formProduto.id}`, payload)
       else await api.post('/api/produtos-prontos', payload)
       setModalOpen(false)
       setFormProduto(formProdutoVazio)
@@ -119,11 +119,11 @@ export function Estoque() {
   }
 
   async function excluirMaterial(id: string) {
-    try { await api.del(`/api/materiais/${id}`); setConfirmandoId(null); reloadMat() }
+    try { await api.del(`/api/materiais?id=${id}`); setConfirmandoId(null); reloadMat() }
     catch (err) { console.error('[Excluir] erro:', err); alert('Não deu pra excluir.') }
   }
   async function excluirProduto(id: string) {
-    try { await api.del(`/api/produtos-prontos/${id}`); setConfirmandoId(null); reloadProd() }
+    try { await api.del(`/api/produtos-prontos?id=${id}`); setConfirmandoId(null); reloadProd() }
     catch (err) { console.error('[Excluir] erro:', err); alert('Não deu pra excluir.') }
   }
 

@@ -16,35 +16,36 @@ function pegarId(req: VercelRequest): string | undefined {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const id = pegarId(req)
 
-  if (req.method === 'GET' && !id) {
-    const materiais = await sql`SELECT * FROM materiais ORDER BY nome`
-    return res.status(200).json(materiais)
+  if (req.method === 'GET') {
+    const produtos = await sql`SELECT * FROM produtos_prontos ORDER BY criado_em DESC`
+    return res.status(200).json(produtos)
   }
 
-  if (req.method === 'POST' && !id) {
-    const { nome, preco_kg, estoque_g, capacidade_g } = req.body
+  if (req.method === 'POST') {
+    const { nome, material, quantidade, custo_unitario, preco_venda } = req.body
     const [novo] = await sql`
-      INSERT INTO materiais (nome, preco_kg, estoque_g, capacidade_g)
-      VALUES (${nome}, ${preco_kg}, ${estoque_g}, ${capacidade_g ?? 1000})
+      INSERT INTO produtos_prontos (nome, material, quantidade, custo_unitario, preco_venda)
+      VALUES (${nome}, ${material}, ${quantidade}, ${custo_unitario}, ${preco_venda})
       RETURNING *
     `
     return res.status(201).json(novo)
   }
 
   if (req.method === 'PATCH' && id) {
-    const { nome, preco_kg, estoque_g, capacidade_g } = req.body
+    const { nome, material, quantidade, custo_unitario, preco_venda } = req.body
     const [atualizado] = await sql`
-      UPDATE materiais SET
-        nome = COALESCE(${nome}, nome), preco_kg = COALESCE(${preco_kg}, preco_kg),
-        estoque_g = COALESCE(${estoque_g}, estoque_g), capacidade_g = COALESCE(${capacidade_g}, capacidade_g)
+      UPDATE produtos_prontos SET
+        nome = COALESCE(${nome}, nome), material = COALESCE(${material}, material),
+        quantidade = COALESCE(${quantidade}, quantidade), custo_unitario = COALESCE(${custo_unitario}, custo_unitario),
+        preco_venda = COALESCE(${preco_venda}, preco_venda)
       WHERE id = ${id} RETURNING *
     `
-    if (!atualizado) return res.status(404).json({ error: 'Material não encontrado' })
+    if (!atualizado) return res.status(404).json({ error: 'Produto não encontrado' })
     return res.status(200).json(atualizado)
   }
 
   if (req.method === 'DELETE' && id) {
-    await sql`DELETE FROM materiais WHERE id = ${id}`
+    await sql`DELETE FROM produtos_prontos WHERE id = ${id}`
     return res.status(204).end()
   }
 

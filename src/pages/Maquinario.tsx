@@ -55,7 +55,7 @@ export function Maquinario() {
         nome: form.nome, tipo: form.tipo, valor: Number(form.valor.replace(',', '.')) || 0,
         aquisicao: form.aquisicao || null, status: form.status
       }
-      if (form.id) await api.patch(`/api/equipamentos/${form.id}`, payload)
+      if (form.id) await api.patch(`/api/equipamentos?id=${form.id}`, payload)
       else await api.post('/api/equipamentos', payload)
       setModalOpen(false)
       setForm(formVazio)
@@ -70,7 +70,7 @@ export function Maquinario() {
 
   async function excluir(id: string) {
     try {
-      await api.del(`/api/equipamentos/${id}`)
+      await api.del(`/api/equipamentos?id=${id}`)
       setConfirmandoId(null)
       reload()
     } catch (err) {
