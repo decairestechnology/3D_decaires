@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Plus, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Trash2, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Money } from '@/components/ui/Money'
 import { Modal } from '@/components/ui/Modal'
@@ -27,6 +27,7 @@ const statusAnterior: Record<StatusPedido, StatusPedido | null> = {
 
 interface PedidoApiRow {
   id: string
+  cliente_id?: string
   cliente_nome: string
   peca: string
   material: string | null
@@ -37,6 +38,8 @@ interface PedidoApiRow {
 
 interface ClienteApiRow { id: string; nome: string }
 
+const formVazio = { id: '', cliente_id: '', peca: '', material: 'PLA', valor: '', prazo: '', status: 'orcamento' as StatusPedido }
+
 export function Pedidos() {
   const location = useLocation()
   const { data, loading, error, reload } = useApi<PedidoApiRow[]>('/api/pedidos', [])
@@ -45,21 +48,40 @@ export function Pedidos() {
   const [modalOpen, setModalOpen] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
-  const [form, setForm] = useState({ cliente_id: '', peca: '', material: 'PLA', quantidade: '1', valor: '', prazo: '', status: 'orcamento' as StatusPedido })
+  const [form, setForm] = useState(formVazio)
 
   useEffect(() => {
     if ((location.state as { abrirModal?: boolean })?.abrirModal) {
-      setModalOpen(true)
+      abrirNovo()
       window.history.replaceState({}, '')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
   const usandoMock = !loading && (error || data.length === 0)
   const pedidos = usandoMock
     ? pedidosMock
-    : data.map(p => ({ id: p.id, clienteNome: p.cliente_nome, peca: p.peca, material: p.material ?? '', valor: Number(p.valor), prazo: p.prazo, status: p.status }))
+    : data.map(p => ({ id: p.id, clienteId: p.cliente_id ?? '', clienteNome: p.cliente_nome, peca: p.peca, material: p.material ?? '', valor: Number(p.valor), prazo: p.prazo, status: p.status }))
 
   const clientesOptions = clientesApi.length > 0 ? clientesApi : clientesMock.map(c => ({ id: c.id, nome: c.nome }))
+
+  function abrirNovo() {
+    setForm(formVazio)
+    setModalOpen(true)
+  }
+
+  function abrirEdicao(p: typeof pedidos[number]) {
+    setForm({
+      id: p.id,
+      cliente_id: (p as { clienteId?: string }).clienteId ?? '',
+      peca: p.peca,
+      material: p.material || 'PLA',
+      valor: String(p.valor).replace('.', ','),
+      prazo: p.prazo ?? '',
+      status: p.status
+    })
+    setModalOpen(true)
+  }
 
   async function mudarStatus(id: string, novo: StatusPedido | null) {
     if (!novo || usandoMock) return
@@ -83,16 +105,18 @@ export function Pedidos() {
     e.preventDefault()
     setSalvando(true)
     try {
-      await api.post('/api/pedidos', {
+      const payload = {
         cliente_id: form.cliente_id,
-        peca: form.quantidade && Number(form.quantidade) > 1 ? `${form.peca} (x${form.quantidade})` : form.peca,
+        peca: form.peca,
         material: form.material,
         valor: Number(form.valor.replace(',', '.')) || 0,
         prazo: form.prazo || null,
         status: form.status
-      })
+      }
+      if (form.id) await api.patch(`/api/pedidos/${form.id}`, payload)
+      else await api.post('/api/pedidos', payload)
       setModalOpen(false)
-      setForm({ cliente_id: '', peca: '', material: 'PLA', quantidade: '1', valor: '', prazo: '', status: 'orcamento' })
+      setForm(formVazio)
       reload()
     } catch (err) {
       console.error('[Salvar] erro:', err)
@@ -109,7 +133,7 @@ export function Pedidos() {
           <h1 className="text-2xl font-semibold m-0">Pedidos</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Fluxo de produção {usandoMock && '(dados de exemplo)'}</p>
         </div>
-        <Button variant="gradient" onClick={() => setModalOpen(true)}><Plus size={15} />Novo pedido</Button>
+        <Button variant="gradient" onClick={abrirNovo}><Plus size={15} />Novo pedido</Button>
       </div>
 
       <div className="flex gap-3.5 overflow-x-auto">
@@ -122,7 +146,14 @@ export function Pedidos() {
               </div>
               {items.map(p => (
                 <div key={p.id} className="bg-[var(--card)] border border-[var(--border)] rounded-[10px] p-2.5 mb-2.5 text-[13px] shadow-sm">
-                  <div className="font-bold mb-1">{p.clienteNome}</div>
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="font-bold">{p.clienteNome}</div>
+                    {!usandoMock && confirmandoId !== p.id && (
+                      <button onClick={() => abrirEdicao(p)} title="Editar" className="text-[var(--muted-foreground)] hover:text-[var(--primary)] -mt-0.5">
+                        <Pencil size={13} />
+                      </button>
+                    )}
+                  </div>
                   {p.peca}{p.material ? ` — ${p.material}` : ''}
                   <div className="text-xs text-[var(--muted-foreground)] flex justify-between mt-1 mb-2">
                     <Money value={p.valor} />
@@ -171,7 +202,7 @@ export function Pedidos() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Novo pedido"
+        title={form.id ? 'Editar pedido' : 'Novo pedido'}
         footer={
           <>
             <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancelar</Button>
@@ -187,7 +218,7 @@ export function Pedidos() {
           {clientesOptions.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
         </Select>
         <Label>Peça</Label>
-        <Input placeholder="Ex: Suporte de celular" value={form.peca} onChange={e => setForm(f => ({ ...f, peca: e.target.value }))} />
+        <Input placeholder="Ex: Suporte de celular (x3)" value={form.peca} onChange={e => setForm(f => ({ ...f, peca: e.target.value }))} />
         <div className="grid grid-cols-2 gap-x-4">
           <div>
             <Label>Material</Label>
@@ -195,18 +226,20 @@ export function Pedidos() {
               <option>PLA</option><option>PETG</option><option>ABS</option>
             </Select>
           </div>
-          <div><Label>Quantidade</Label><Input value={form.quantidade} onChange={e => setForm(f => ({ ...f, quantidade: e.target.value }))} /></div>
+          <div><Label>Valor (R$)</Label><Input placeholder="0,00" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} /></div>
         </div>
         <div className="grid grid-cols-2 gap-x-4">
-          <div><Label>Valor (R$)</Label><Input placeholder="0,00" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} /></div>
           <div><Label>Prazo de entrega</Label><Input type="date" value={form.prazo} onChange={e => setForm(f => ({ ...f, prazo: e.target.value }))} /></div>
+          <div>
+            <Label>Status</Label>
+            <Select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as StatusPedido }))}>
+              <option value="orcamento">Orçamento</option>
+              <option value="producao">Em produção</option>
+              <option value="pronto">Pronto</option>
+              <option value="entregue">Entregue</option>
+            </Select>
+          </div>
         </div>
-        <Label>Status inicial</Label>
-        <Select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as StatusPedido }))}>
-          <option value="orcamento">Orçamento</option>
-          <option value="producao">Em produção</option>
-          <option value="pronto">Pronto</option>
-        </Select>
         {!form.cliente_id && <div className="text-xs text-[var(--muted-foreground)] mt-1">Escolha um cliente cadastrado antes de salvar.</div>}
       </Modal>
     </div>

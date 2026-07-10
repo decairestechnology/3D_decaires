@@ -98,6 +98,5 @@ const [pedidos, setPedidos] = useState<Pedido[]>([])
 useEffect(() => { api.get<Pedido[]>('/api/pedidos').then(setPedidos) }, [])
 ```
 
-Repita esse padrão criando as rotas que faltam em `/api` (clientes já tem, pedidos já tem —
-falta materiais, produtos_prontos, lancamentos_financeiros, equipamentos, agenda_eventos,
-seguindo o mesmo modelo dos dois arquivos existentes).
+Repita esse padrão pra qualquer tela nova que você criar — as rotas de todas as entidades atuais
+(clientes, pedidos, materiais, produtos-prontos, lançamentos, equipamentos, agenda) já existem em `/api`.

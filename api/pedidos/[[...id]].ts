@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET' && !id) {
     const pedidos = await sql`
-      SELECT p.id, c.nome as cliente_nome, p.peca, p.material, p.valor, p.prazo, p.status
+      SELECT p.id, p.cliente_id, c.nome as cliente_nome, p.peca, p.material, p.valor, p.prazo, p.status
       FROM pedidos p
       JOIN clientes c ON c.id = p.cliente_id
       ORDER BY p.criado_em DESC
