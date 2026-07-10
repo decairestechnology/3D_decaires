@@ -62,7 +62,8 @@ export function Estoque() {
       setModalOpen(false)
       setFormMaterial({ nome: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000' })
       reloadMat()
-    } catch {
+    } catch (err) {
+      console.error('[Salvar] erro:', err)
       alert('Não deu pra salvar — confere se o banco (Neon) está conectado e as variáveis de ambiente configuradas.')
     } finally {
       setSalvando(false)
@@ -84,7 +85,8 @@ export function Estoque() {
       setModalOpen(false)
       setFormProduto({ nome: '', material: '', quantidade: '1', custo_unitario: '', preco_venda: '' })
       reloadProd()
-    } catch {
+    } catch (err) {
+      console.error('[Salvar] erro:', err)
       alert('Não deu pra salvar — confere se o banco (Neon) está conectado e as variáveis de ambiente configuradas.')
     } finally {
       setSalvando(false)

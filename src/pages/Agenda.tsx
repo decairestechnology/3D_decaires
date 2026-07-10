@@ -55,7 +55,8 @@ export function Agenda() {
       setModalOpen(false)
       setForm({ data: '', titulo: '', descricao: '', tipo: 'entrega' })
       reload()
-    } catch {
+    } catch (err) {
+      console.error('[Salvar] erro:', err)
       alert('Não deu pra salvar — confere se o banco (Neon) está conectado e as variáveis de ambiente configuradas.')
     } finally {
       setSalvando(false)

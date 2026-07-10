@@ -1,13 +1,24 @@
-import { Sun, Moon, Eye, EyeOff } from 'lucide-react'
+import { useState } from 'react'
+import { Sun, Moon, Eye, EyeOff, Check } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Label, Input } from '@/components/ui/Input'
 import { useTheme } from '@/context/ThemeContext'
 import { useValuesVisibility } from '@/context/ValuesVisibilityContext'
+import { carregarPreferencias, salvarPreferencias } from '@/lib/settings'
 
 export function Configuracoes() {
   const { theme, toggleTheme } = useTheme()
   const { hideValues, toggleHideValues } = useValuesVisibility()
+
+  const [prefs, setPrefs] = useState(carregarPreferencias())
+  const [salvo, setSalvo] = useState(false)
+
+  function handleSalvar() {
+    salvarPreferencias(prefs)
+    setSalvo(true)
+    setTimeout(() => setSalvo(false), 2000)
+  }
 
   return (
     <div>
@@ -44,11 +55,17 @@ export function Configuracoes() {
       </div>
 
       <Card className="mt-4 max-w-[420px]">
+        <div className="text-xs font-bold text-[var(--muted-foreground)] mb-3">PADRÕES DO ORÇAMENTO</div>
         <Label>Margem de lucro padrão (%)</Label>
-        <Input defaultValue="60" />
+        <Input value={prefs.margemPadrao} onChange={e => setPrefs(p => ({ ...p, margemPadrao: e.target.value }))} />
         <Label>Custo de energia padrão (R$/h)</Label>
-        <Input defaultValue="0,45" />
-        <Button variant="primary">Salvar</Button>
+        <Input value={prefs.custoEnergiaPadrao} onChange={e => setPrefs(p => ({ ...p, custoEnergiaPadrao: e.target.value }))} />
+        <Button variant="primary" onClick={handleSalvar}>
+          {salvo ? <><Check size={15} />Salvo!</> : 'Salvar'}
+        </Button>
+        <div className="text-xs text-[var(--muted-foreground)] mt-2">
+          Esses valores viram o ponto de partida toda vez que você abrir a tela de Orçamento.
+        </div>
       </Card>
     </div>
   )

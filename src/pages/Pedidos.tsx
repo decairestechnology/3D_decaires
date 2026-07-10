@@ -75,7 +75,8 @@ export function Pedidos() {
       setModalOpen(false)
       setForm({ cliente_id: '', peca: '', material: 'PLA', quantidade: '1', valor: '', prazo: '', status: 'orcamento' })
       reload()
-    } catch {
+    } catch (err) {
+      console.error('[Salvar] erro:', err)
       alert('Não deu pra salvar — confere se o banco (Neon) está conectado e as variáveis de ambiente configuradas.')
     } finally {
       setSalvando(false)

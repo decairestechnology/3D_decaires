@@ -53,7 +53,7 @@ export function Relatorios() {
         ))}
       </div>
 
-      <div className="bg-[var(--card)] border-[1.5px] border-[var(--secondary)] rounded-xl px-4.5 py-4 flex justify-between items-center my-4.5">
+      <div className="bg-[var(--card)] border-[1.5px] border-[var(--secondary)] rounded-xl px-4.5 py-4 flex justify-between items-center mt-4.5 mb-7">
         <div className="flex gap-3 items-center">
           <div className="w-[34px] h-[34px] rounded-lg bg-gradient-to-br from-cyan-500 to-violet-600 text-white flex items-center justify-center flex-shrink-0">
             <Sparkles size={16} />

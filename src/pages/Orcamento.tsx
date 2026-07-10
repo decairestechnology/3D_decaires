@@ -6,6 +6,7 @@ import { Label, Input, Select } from '@/components/ui/Input'
 import { formatMoney } from '@/components/ui/Money'
 import { useApi } from '@/lib/useApi'
 import { materiais as materiaisMock } from '@/data/mockData'
+import { carregarPreferencias } from '@/lib/settings'
 
 interface MaterialApiRow {
   id: string
@@ -20,12 +21,14 @@ export function Orcamento() {
     ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, precoKg: m.precoKg }))
     : data.map(m => ({ id: m.id, nome: m.nome, precoKg: Number(m.preco_kg) }))
 
+  const prefs = carregarPreferencias()
+
   const [nome, setNome] = useState('')
   const [peso, setPeso] = useState('80')
   const [materialIdx, setMaterialIdx] = useState(0)
   const [horas, setHoras] = useState('6')
-  const [custoEnergiaHora, setCustoEnergiaHora] = useState('0,45')
-  const [margem, setMargem] = useState('60')
+  const [custoEnergiaHora, setCustoEnergiaHora] = useState(prefs.custoEnergiaPadrao)
+  const [margem, setMargem] = useState(prefs.margemPadrao)
   const [quantidade, setQuantidade] = useState('1')
 
   useEffect(() => { setMaterialIdx(0) }, [materiais.length])
@@ -72,20 +75,17 @@ export function Orcamento() {
         <body>
           <img class="logo" src="${window.location.origin}/logo.png" />
           <h1>DeCaires 3D — Orçamento</h1>
-          <div class="sub">${new Date().toLocaleDateString('pt-BR')}${nome ? ' · Peça: ' + nome : ''}</div>
+          <div class="sub">${new Date().toLocaleDateString('pt-BR')}${nome ? ' · ' + nome : ''}</div>
           <table>
-            <tr><td>Material</td><td>${materiais[materialIdx]?.nome ?? '—'}</td></tr>
-            <tr><td>Peso</td><td>${peso}g</td></tr>
-            <tr><td>Tempo de impressão</td><td>${horas}h</td></tr>
+            <tr><td>Peça</td><td>${nome || 'Peça personalizada'}</td></tr>
             <tr><td>Quantidade</td><td>${quantidade}</td></tr>
-            <tr><td>Custo material</td><td>${formatMoney(resultado.custoMaterial)}</td></tr>
-            <tr><td>Custo energia</td><td>${formatMoney(resultado.custoEnergia)}</td></tr>
+            <tr><td>Prazo estimado</td><td>A combinar</td></tr>
           </table>
           <div class="total">
             <div class="label">VALOR TOTAL</div>
             <div class="valor">${formatMoney(resultado.precoFinal)}</div>
           </div>
-          <div class="footer">Orçamento gerado por DeCaires 3D — Gestão. Sujeito a alteração conforme detalhes finais da peça.</div>
+          <div class="footer">Orçamento gerado por DeCaires 3D. Válido por 7 dias — sujeito a alteração conforme detalhes finais da peça.</div>
         </body>
       </html>
     `)
