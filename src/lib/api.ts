@@ -10,7 +10,7 @@ async function lerErro(res: Response): Promise<string> {
 
 export const api = {
   async get<T>(path: string): Promise<T> {
-    const res = await fetch(path)
+    const res = await fetch(path, { cache: 'no-store' })
     if (!res.ok) {
       const detalhe = await lerErro(res)
       // eslint-disable-next-line no-console

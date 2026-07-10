@@ -14,6 +14,7 @@ function pegarId(req: VercelRequest): string | undefined {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Cache-Control', 'no-store')
   const id = pegarId(req)
 
   if (req.method === 'GET') {
