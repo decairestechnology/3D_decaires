@@ -53,6 +53,8 @@ export function Orcamento() {
   const [salvando, setSalvando] = useState(false)
   const [convertendoId, setConvertendoId] = useState<string | null>(null)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
+  const [editandoClienteDe, setEditandoClienteDe] = useState<string | null>(null)
+  const [clienteSelecionadoEdicao, setClienteSelecionadoEdicao] = useState('')
 
   const clienteNome = clientesApi.find(c => c.id === clienteId)?.nome ?? ''
 
@@ -198,6 +200,23 @@ export function Orcamento() {
     }
   }
 
+  function abrirVincularCliente(orc: OrcamentoSalvoApiRow) {
+    setEditandoClienteDe(orc.id)
+    setClienteSelecionadoEdicao(orc.cliente_id ?? '')
+  }
+
+  async function salvarClienteVinculado(orcId: string) {
+    if (!clienteSelecionadoEdicao) return
+    try {
+      await api.patch(`/api/orcamentos?id=${orcId}`, { cliente_id: clienteSelecionadoEdicao })
+      setEditandoClienteDe(null)
+      reloadSalvos()
+    } catch (err) {
+      console.error('[Vincular cliente] erro:', err)
+      alert('Não deu pra vincular o cliente.')
+    }
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-semibold m-0">Orçamento</h1>
@@ -219,6 +238,9 @@ export function Orcamento() {
               <option value="">Sem cliente vinculado</option>
               {clientesApi.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </Select>
+            {clientesApi.length === 0 && (
+              <div className="text-xs text-[var(--muted-foreground)] -mt-2">Nenhum cliente cadastrado ainda — pode salvar sem cliente e vincular depois, ou cadastra um em Clientes.</div>
+            )}
           </div>
           <div><Label>Margem de lucro (%)</Label><Input value={margem} onChange={e => setMargem(e.target.value)} /></div>
           <div><Label>Custo energia (R$/h)</Label><Input value={custoEnergiaHora} onChange={e => setCustoEnergiaHora(e.target.value)} /></div>
@@ -299,28 +321,56 @@ export function Orcamento() {
           <Card className="p-0">
             {salvosApi.map((o, i) => {
               const last = i === salvosApi.length - 1
+              const editando = editandoClienteDe === o.id
               return (
                 <div key={o.id} className={`flex items-center gap-3 px-4 py-3 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
                   <div className="flex-1">
-                    <div className="text-[13.5px] font-bold">{o.cliente_nome ?? 'Sem cliente'}</div>
-                    <div className="text-xs text-[var(--muted-foreground)]">
-                      {o.itens.map(it => it.nome).join(', ')} · {formatarDataBR(o.criado_em)}
-                    </div>
+                    {editando ? (
+                      <div className="flex items-center gap-2">
+                        <Select value={clienteSelecionadoEdicao} onChange={e => setClienteSelecionadoEdicao(e.target.value)}>
+                          <option value="">Selecione um cliente...</option>
+                          {clientesApi.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                        </Select>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-[13.5px] font-bold flex items-center gap-2">
+                          {o.cliente_nome ?? 'Sem cliente'}
+                          {!o.cliente_nome && !o.convertido && (
+                            <button onClick={() => abrirVincularCliente(o)} className="text-[11px] font-semibold text-[var(--primary)] underline underline-offset-2">
+                              vincular cliente
+                            </button>
+                          )}
+                        </div>
+                        <div className="text-xs text-[var(--muted-foreground)]">
+                          {o.itens.map(it => it.nome).join(', ')} · {formatarDataBR(o.criado_em)}
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <div className="text-sm font-bold">{formatMoney(Number(o.valor_total))}</div>
-                  {confirmandoId === o.id ? (
-                    <InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluirSalvo(o.id)} />
-                  ) : o.convertido ? (
-                    <Badge color="green">Virou pedido</Badge>
-                  ) : (
+                  {editando ? (
                     <div className="flex items-center gap-2">
-                      <Button variant="ghost" onClick={() => virarPedido(o)} disabled={convertendoId === o.id}>
-                        <PackageCheck size={14} />{convertendoId === o.id ? 'Convertendo...' : 'Virar pedido'}
-                      </Button>
-                      <button onClick={() => setConfirmandoId(o.id)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600">
-                        <Trash2 size={13} />
-                      </button>
+                      <Button variant="ghost" onClick={() => setEditandoClienteDe(null)}>Cancelar</Button>
+                      <Button variant="primary" onClick={() => salvarClienteVinculado(o.id)} disabled={!clienteSelecionadoEdicao}>Salvar</Button>
                     </div>
+                  ) : (
+                    <>
+                      <div className="text-sm font-bold">{formatMoney(Number(o.valor_total))}</div>
+                      {confirmandoId === o.id ? (
+                        <InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluirSalvo(o.id)} />
+                      ) : o.convertido ? (
+                        <Badge color="green">Virou pedido</Badge>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" onClick={() => virarPedido(o)} disabled={convertendoId === o.id}>
+                            <PackageCheck size={14} />{convertendoId === o.id ? 'Convertendo...' : 'Virar pedido'}
+                          </Button>
+                          <button onClick={() => setConfirmandoId(o.id)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )
