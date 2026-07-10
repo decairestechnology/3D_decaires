@@ -1,7 +1,12 @@
-import { Package, Wrench } from 'lucide-react'
+import { useState, FormEvent } from 'react'
+import { Package, Wrench, Plus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
+import { Label, Input, Select } from '@/components/ui/Input'
 import { useApi } from '@/lib/useApi'
+import { api } from '@/lib/api'
 import { eventosAgenda as eventosMock } from '@/data/mockData'
 
 // Julho de 2026 — domingo como primeiro dia da semana
@@ -24,7 +29,11 @@ interface EventoApiRow {
 }
 
 export function Agenda() {
-  const { data, loading, error } = useApi<EventoApiRow[]>('/api/agenda', [])
+  const { data, loading, error, reload } = useApi<EventoApiRow[]>('/api/agenda', [])
+  const [modalOpen, setModalOpen] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [form, setForm] = useState({ data: '', titulo: '', descricao: '', tipo: 'entrega' })
+
   const usandoMock = !loading && (error || data.length === 0)
   const eventos = usandoMock ? eventosMock : data.map(e => ({ id: e.id, data: e.data, titulo: e.titulo, descricao: e.descricao ?? '', tipo: e.tipo }))
 
@@ -32,10 +41,36 @@ export function Agenda() {
     return eventos.filter(e => Number(e.data.split('-')[2]) === dia)
   }
 
+  async function handleSalvar(e: FormEvent) {
+    e.preventDefault()
+    if (!form.titulo.trim() || !form.data) return
+    setSalvando(true)
+    try {
+      await api.post('/api/agenda', {
+        data: form.data,
+        titulo: form.titulo,
+        descricao: form.descricao || null,
+        tipo: form.tipo
+      })
+      setModalOpen(false)
+      setForm({ data: '', titulo: '', descricao: '', tipo: 'entrega' })
+      reload()
+    } catch {
+      alert('Não deu pra salvar — confere se o banco (Neon) está conectado e as variáveis de ambiente configuradas.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
   return (
     <div>
-      <h1 className="text-2xl font-semibold m-0">Agenda</h1>
-      <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Prazos de entrega, manutenções e compromissos {usandoMock && '(dados de exemplo)'}</p>
+      <div className="flex justify-between items-center mb-5">
+        <div>
+          <h1 className="text-2xl font-semibold m-0">Agenda</h1>
+          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Prazos de entrega, manutenções e compromissos {usandoMock && '(dados de exemplo)'}</p>
+        </div>
+        <Button variant="gradient" onClick={() => setModalOpen(true)}><Plus size={15} />Novo compromisso</Button>
+      </div>
 
       <Card>
         <div className="flex items-center justify-between mb-3.5">
@@ -97,6 +132,33 @@ export function Agenda() {
           </div>
         ))}
       </Card>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Novo compromisso"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancelar</Button>
+            <Button variant="gradient" disabled={salvando} onClick={handleSalvar}><Plus size={15} />{salvando ? 'Salvando...' : 'Salvar'}</Button>
+          </>
+        }
+      >
+        <Label>Título</Label>
+        <Input placeholder="Ex: Entrega — Cliente X" value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} />
+        <div className="grid grid-cols-2 gap-x-4">
+          <div><Label>Data</Label><Input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} /></div>
+          <div>
+            <Label>Tipo</Label>
+            <Select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}>
+              <option value="entrega">Entrega</option>
+              <option value="manutencao">Manutenção</option>
+            </Select>
+          </div>
+        </div>
+        <Label>Descrição</Label>
+        <Input placeholder="Detalhe opcional" value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} />
+      </Modal>
     </div>
   )
 }

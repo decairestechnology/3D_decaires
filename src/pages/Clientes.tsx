@@ -1,8 +1,12 @@
+import { useState, FormEvent } from 'react'
 import { Plus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
+import { Label, Input } from '@/components/ui/Input'
 import { Money } from '@/components/ui/Money'
 import { useApi } from '@/lib/useApi'
+import { api } from '@/lib/api'
 import { clientes as clientesMock } from '@/data/mockData'
 import { Cliente } from '@/types'
 
@@ -19,24 +23,41 @@ function iniciais(nome: string) {
 }
 
 export function Clientes() {
-  const { data, loading, error } = useApi<ClienteApiRow[]>('/api/clientes', [])
+  const { data, loading, error, reload } = useApi<ClienteApiRow[]>('/api/clientes', [])
+  const [modalOpen, setModalOpen] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [form, setForm] = useState({ nome: '', contato: '' })
 
-  const clientes: Cliente[] =
-    !loading && !error && data.length > 0
-      ? data.map(c => ({ id: c.id, nome: c.nome, contato: c.contato ?? '—', pedidos: c.pedidos, totalGasto: Number(c.total_gasto) }))
-      : clientesMock
+  const usandoMock = !loading && (error || data.length === 0)
+  const clientes: Cliente[] = usandoMock
+    ? clientesMock
+    : data.map(c => ({ id: c.id, nome: c.nome, contato: c.contato ?? '—', pedidos: c.pedidos, totalGasto: Number(c.total_gasto) }))
+
+  async function handleSalvar(e: FormEvent) {
+    e.preventDefault()
+    if (!form.nome.trim()) return
+    setSalvando(true)
+    try {
+      await api.post('/api/clientes', { nome: form.nome, contato: form.contato || null })
+      setModalOpen(false)
+      setForm({ nome: '', contato: '' })
+      reload()
+    } catch {
+      alert('Não deu pra salvar — confere se o banco (Neon) está conectado e as variáveis de ambiente configuradas.')
+    } finally {
+      setSalvando(false)
+    }
+  }
 
   return (
     <div>
       <div className="flex justify-between items-center mb-5">
         <div>
           <h1 className="text-2xl font-semibold m-0">Clientes</h1>
-          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Histórico e contato</p>
+          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Histórico e contato {usandoMock && '(dados de exemplo)'}</p>
         </div>
-        <Button variant="gradient"><Plus size={15} />Novo cliente</Button>
+        <Button variant="gradient" onClick={() => setModalOpen(true)}><Plus size={15} />Novo cliente</Button>
       </div>
-
-      {error && <div className="text-xs text-amber-600 font-semibold mb-3">{error}</div>}
 
       <Card className="p-0">
         <table className="w-full border-collapse text-[13.5px]">
@@ -66,6 +87,23 @@ export function Clientes() {
           </tbody>
         </table>
       </Card>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Novo cliente"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancelar</Button>
+            <Button variant="gradient" disabled={salvando} onClick={handleSalvar}><Plus size={15} />{salvando ? 'Salvando...' : 'Salvar cliente'}</Button>
+          </>
+        }
+      >
+        <Label>Nome</Label>
+        <Input placeholder="Nome do cliente" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
+        <Label>Contato (telefone ou email)</Label>
+        <Input placeholder="(16) 99999-9999" value={form.contato} onChange={e => setForm(f => ({ ...f, contato: e.target.value }))} />
+      </Modal>
     </div>
   )
 }

@@ -47,6 +47,53 @@ export function Orcamento() {
     window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
   }
 
+  function gerarPdf() {
+    const janela = window.open('', '_blank', 'width=650,height=800')
+    if (!janela) return
+    janela.document.write(`
+      <html>
+        <head>
+          <title>Orçamento${nome ? ' — ' + nome : ''}</title>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; color: #0F172A; }
+            .logo { width: 56px; height: 56px; margin-bottom: 8px; }
+            h1 { font-size: 20px; margin: 0 0 2px 0; }
+            .sub { color: #64748B; font-size: 13px; margin-bottom: 28px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+            td { padding: 8px 0; border-bottom: 1px solid #E2E8F0; font-size: 14px; }
+            td:last-child { text-align: right; }
+            .total { background: #E0F9FF; border-radius: 10px; padding: 16px 20px; margin-top: 8px; }
+            .total .label { font-size: 12px; color: #64748B; font-weight: 600; }
+            .total .valor { font-size: 26px; font-weight: 800; color: #7C3AED; }
+            .footer { margin-top: 40px; font-size: 11px; color: #94A3B8; }
+          </style>
+        </head>
+        <body>
+          <img class="logo" src="${window.location.origin}/logo.png" />
+          <h1>DeCaires 3D — Orçamento</h1>
+          <div class="sub">${new Date().toLocaleDateString('pt-BR')}${nome ? ' · Peça: ' + nome : ''}</div>
+          <table>
+            <tr><td>Material</td><td>${materiais[materialIdx]?.nome ?? '—'}</td></tr>
+            <tr><td>Peso</td><td>${peso}g</td></tr>
+            <tr><td>Tempo de impressão</td><td>${horas}h</td></tr>
+            <tr><td>Quantidade</td><td>${quantidade}</td></tr>
+            <tr><td>Custo material</td><td>${formatMoney(resultado.custoMaterial)}</td></tr>
+            <tr><td>Custo energia</td><td>${formatMoney(resultado.custoEnergia)}</td></tr>
+          </table>
+          <div class="total">
+            <div class="label">VALOR TOTAL</div>
+            <div class="valor">${formatMoney(resultado.precoFinal)}</div>
+          </div>
+          <div class="footer">Orçamento gerado por DeCaires 3D — Gestão. Sujeito a alteração conforme detalhes finais da peça.</div>
+        </body>
+      </html>
+    `)
+    janela.document.close()
+    janela.focus()
+    setTimeout(() => janela.print(), 300)
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-semibold m-0">Orçamento</h1>
@@ -85,7 +132,7 @@ export function Orcamento() {
             <div className="text-2xl font-extrabold text-[var(--secondary)]">{formatMoney(resultado.precoFinal)}</div>
             <div className="text-xs text-[var(--muted-foreground)] mt-1">Margem de {margem}% aplicada</div>
           </div>
-          <Button variant="gradient" className="w-full mt-3.5"><Send size={15} />Gerar orçamento PDF</Button>
+          <Button variant="gradient" className="w-full mt-3.5" onClick={gerarPdf}><Send size={15} />Gerar orçamento PDF</Button>
           <Button variant="whatsapp" className="w-full mt-2" onClick={enviarWhatsApp}>Enviar por WhatsApp</Button>
         </Card>
       </div>
