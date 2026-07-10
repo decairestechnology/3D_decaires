@@ -1,5 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { sql } from './_db'
+import { neon } from '@neondatabase/serverless'
+
+if (!process.env.DATABASE_URL) {
+  // eslint-disable-next-line no-console
+  console.error(
+    '[api] DATABASE_URL não encontrada. Confere Vercel → Settings → Environment Variables ' +
+    '(e lembra de fazer Redeploy depois de adicionar/mudar uma variável).'
+  )
+}
+
+const sql = neon(process.env.DATABASE_URL ?? '')
 
 // Assistente Scout — usa a API da Anthropic (Claude) com um retrato rápido dos
 // dados do negócio, pra responder perguntas reais sobre o sistema.
