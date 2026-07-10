@@ -9,6 +9,7 @@ import { Label, Input, Select } from '@/components/ui/Input'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { eventosAgenda as eventosMock } from '@/data/mockData'
+import { diaDoMes, formatarDataBR } from '@/lib/date'
 
 const semanas = [
   [0, 0, 0, 1, 2, 3, 4],
@@ -44,11 +45,12 @@ export function Agenda() {
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
 
-  const usandoMock = !loading && (error || data.length === 0)
+  const usandoMock = !loading && !!error
+  const vazio = !loading && !error && data.length === 0
   const eventos = usandoMock ? eventosMock as (typeof eventosMock[number] & { tipo: TipoEvento })[] : data.map(e => ({ id: e.id, data: e.data, titulo: e.titulo, descricao: e.descricao ?? '', tipo: e.tipo }))
 
   function eventosNoDia(dia: number) {
-    return eventos.filter(e => Number(e.data.split('-')[2]) === dia)
+    return eventos.filter(e => diaDoMes(e.data) === dia)
   }
 
   function abrirNovo() {
@@ -57,7 +59,7 @@ export function Agenda() {
   }
 
   function abrirEdicao(ev: typeof eventos[number]) {
-    setForm({ id: ev.id, data: ev.data, titulo: ev.titulo, descricao: ev.descricao, tipo: ev.tipo })
+    setForm({ id: ev.id, data: ev.data.slice(0, 10), titulo: ev.titulo, descricao: ev.descricao, tipo: ev.tipo })
     setModalOpen(true)
   }
 
@@ -135,13 +137,15 @@ export function Agenda() {
 
       <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Próximos compromissos</h2>
       <Card className="p-0">
-        {eventos.map((e, i) => {
+        {vazio ? (
+          <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum compromisso ainda. Clica em "Novo compromisso" pra começar.</div>
+        ) : eventos.map((e, i) => {
           const info = tipoInfo[e.tipo]
           const Icon = info.icon
           return (
             <div key={e.id} className={`flex items-center gap-3 px-4 py-3 ${i < eventos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>
               <div className="text-xs font-bold text-[var(--muted-foreground)] w-11 flex-shrink-0">
-                {e.data.split('-').slice(1).reverse().join('/')}
+                {formatarDataBR(e.data)}
               </div>
               <div className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center flex-shrink-0 ${info.dot}`}>
                 <Icon size={16} />

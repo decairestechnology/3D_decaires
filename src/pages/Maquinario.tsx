@@ -10,6 +10,7 @@ import { Label, Input, Select } from '@/components/ui/Input'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { equipamentos as equipamentosMock } from '@/data/mockData'
+import { formatarDataBR, mesAno } from '@/lib/date'
 
 interface EquipamentoApiRow {
   id: string; nome: string; tipo: 'impressora' | 'ferramenta'; valor: string; aquisicao: string; status: string
@@ -30,7 +31,8 @@ export function Maquinario() {
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
 
-  const usandoMock = !loading && (error || data.length === 0)
+  const usandoMock = !loading && !!error
+  const vazio = !loading && !error && data.length === 0
   const equipamentos = usandoMock
     ? equipamentosMock
     : data.map(e => ({ id: e.id, nome: e.nome, tipo: e.tipo, valor: Number(e.valor), aquisicao: e.aquisicao, status: e.status }))
@@ -105,6 +107,9 @@ export function Maquinario() {
       </div>
 
       <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Impressoras</h2>
+      {vazio || impressoras.length === 0 ? (
+        <Card><div className="text-center py-6 text-sm text-[var(--muted-foreground)]">Nenhuma impressora cadastrada ainda.</div></Card>
+      ) : (
       <div className="flex gap-4 flex-wrap">
         {impressoras.map(e => (
           <Card key={e.id} className="flex-1 min-w-[260px]">
@@ -122,14 +127,18 @@ export function Maquinario() {
             </div>
             {confirmandoId === e.id && <div className="mt-2"><InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluir(e.id)} /></div>}
             <div className="text-xs text-[var(--muted-foreground)] mt-1.5">
-              Comprada em {e.aquisicao?.split('-').reverse().join('/')} · <Money value={e.valor} />
+              Comprada em {e.aquisicao ? formatarDataBR(e.aquisicao) : '—'} · <Money value={e.valor} />
             </div>
           </Card>
         ))}
       </div>
+      )}
 
       <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Ferramentas</h2>
       <Card className="p-0">
+        {vazio || ferramentas.length === 0 ? (
+          <div className="text-center py-6 text-sm text-[var(--muted-foreground)]">Nenhuma ferramenta cadastrada ainda.</div>
+        ) : (
         <table className="w-full border-collapse text-[13.5px]">
           <thead>
             <tr>
@@ -147,7 +156,7 @@ export function Maquinario() {
                 <tr key={e.id}>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{e.nome}</td>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}><Money value={e.valor} /></td>
-                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{e.aquisicao?.slice(0, 7).split('-').reverse().join('/')}</td>
+                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{e.aquisicao ? mesAno(e.aquisicao).split('-').reverse().join('/') : '—'}</td>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}><Badge color={badgeColor(e.status)}>{e.status}</Badge></td>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
                     {confirmandoId === e.id ? (
@@ -164,6 +173,7 @@ export function Maquinario() {
             })}
           </tbody>
         </table>
+        )}
       </Card>
 
       <Modal

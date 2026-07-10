@@ -40,7 +40,8 @@ export function Dashboard() {
   const { data: matData } = useApi<MaterialApiRow[]>('/api/materiais', [])
   const { data: equipData } = useApi<EquipamentoApiRow[]>('/api/equipamentos', [])
 
-  const usandoMock = !loading && (error || data.length === 0)
+  const usandoMock = !loading && !!error
+  const vazio = !loading && !error && data.length === 0
   const pedidosTodos = usandoMock
     ? pedidosMock.map(p => ({ ...p, prazo: null as string | null }))
     : data.map(p => ({ id: p.id, clienteNome: p.cliente_nome, peca: p.peca, valor: Number(p.valor), prazo: p.prazo, status: p.status }))

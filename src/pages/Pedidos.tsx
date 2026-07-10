@@ -10,6 +10,7 @@ import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { pedidos as pedidosMock, clientes as clientesMock } from '@/data/mockData'
 import { StatusPedido } from '@/types'
+import { formatarDataBR } from '@/lib/date'
 
 const colunas: { status: StatusPedido; titulo: string }[] = [
   { status: 'orcamento', titulo: 'ORÇAMENTO' },
@@ -58,7 +59,8 @@ export function Pedidos() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
-  const usandoMock = !loading && (error || data.length === 0)
+  const usandoMock = !loading && !!error
+  const vazio = !loading && !error && data.length === 0
   const pedidos = usandoMock
     ? pedidosMock
     : data.map(p => ({ id: p.id, clienteId: p.cliente_id ?? '', clienteNome: p.cliente_nome, peca: p.peca, material: p.material ?? '', valor: Number(p.valor), prazo: p.prazo, status: p.status }))
@@ -77,7 +79,7 @@ export function Pedidos() {
       peca: p.peca,
       material: p.material || 'PLA',
       valor: String(p.valor).replace('.', ','),
-      prazo: p.prazo ?? '',
+      prazo: p.prazo ? p.prazo.slice(0, 10) : '',
       status: p.status
     })
     setModalOpen(true)
@@ -157,7 +159,7 @@ export function Pedidos() {
                   {p.peca}{p.material ? ` — ${p.material}` : ''}
                   <div className="text-xs text-[var(--muted-foreground)] flex justify-between mt-1 mb-2">
                     <Money value={p.valor} />
-                    <span>{p.prazo ? p.prazo.split('-').slice(1).reverse().join('/') : '—'}</span>
+                    <span>{p.prazo ? formatarDataBR(p.prazo) : '—'}</span>
                   </div>
 
                   {confirmandoId === p.id ? (

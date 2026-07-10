@@ -24,7 +24,8 @@ export function Relatorios() {
   const { data, loading, error } = useApi<LancamentoApiRow[]>('/api/lancamentos', [])
   const { data: clientesData } = useApi<ClienteApiRow[]>('/api/clientes', [])
 
-  const usandoMock = !loading && (error || data.length === 0)
+  const usandoMock = !loading && !!error
+  const vazio = !loading && !error && data.length === 0
   const lancamentos = usandoMock
     ? lancamentosMock.map(l => ({ ...l, categoria: l.tipo === 'receita' ? 'vendas' : 'outros' }))
     : data.map(l => ({ id: l.id, data: soData(l.data), descricao: l.descricao, tipo: l.tipo, valor: Number(l.valor), categoria: l.categoria ?? 'outros' }))

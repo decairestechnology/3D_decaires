@@ -34,7 +34,8 @@ export function Clientes() {
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
 
-  const usandoMock = !loading && (error || data.length === 0)
+  const usandoMock = !loading && !!error
+  const vazio = !loading && !error && data.length === 0
   const clientes = usandoMock
     ? clientesMock.map(c => ({ ...c, email: '', endereco: '', observacoes: '' }))
     : data.map(c => ({
@@ -99,6 +100,9 @@ export function Clientes() {
       </div>
 
       <Card className="p-0">
+        {vazio ? (
+          <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum cliente cadastrado ainda. Clica em "Novo cliente" pra começar.</div>
+        ) : (
         <table className="w-full border-collapse text-[13.5px]">
           <thead>
             <tr>
@@ -146,6 +150,7 @@ export function Clientes() {
             })}
           </tbody>
         </table>
+        )}
       </Card>
 
       <Modal

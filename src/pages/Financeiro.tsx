@@ -10,6 +10,7 @@ import { Label, Input, Select } from '@/components/ui/Input'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { lancamentos as lancamentosMock } from '@/data/mockData'
+import { formatarDataBR } from '@/lib/date'
 
 interface LancamentoApiRow {
   id: string
@@ -36,7 +37,8 @@ export function Financeiro() {
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
 
-  const usandoMock = !loading && (error || data.length === 0)
+  const usandoMock = !loading && !!error
+  const vazio = !loading && !error && data.length === 0
   const lancamentos = usandoMock
     ? lancamentosMock.map(l => ({ ...l, categoria: l.tipo === 'receita' ? 'vendas' : 'outros' }))
     : data.map(l => ({ id: l.id, data: l.data, descricao: l.descricao, tipo: l.tipo, valor: Number(l.valor), categoria: l.categoria ?? 'outros' }))
@@ -49,7 +51,7 @@ export function Financeiro() {
     setModalOpen(true)
   }
   function abrirEdicao(l: typeof lancamentos[number]) {
-    setForm({ id: l.id, data: l.data, descricao: l.descricao, tipo: l.tipo, valor: String(l.valor).replace('.', ','), categoria: l.categoria })
+    setForm({ id: l.id, data: l.data.slice(0, 10), descricao: l.descricao, tipo: l.tipo, valor: String(l.valor).replace('.', ','), categoria: l.categoria })
     setModalOpen(true)
   }
 
@@ -117,6 +119,9 @@ export function Financeiro() {
 
       <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Lançamentos recentes</h2>
       <Card className="p-0">
+        {vazio ? (
+          <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum lançamento ainda. Clica em "Novo lançamento" pra começar.</div>
+        ) : (
         <table className="w-full border-collapse text-[13.5px]">
           <thead>
             <tr>
@@ -133,7 +138,7 @@ export function Financeiro() {
               const last = i === lancamentos.length - 1
               return (
                 <tr key={l.id}>
-                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{l.data.split('-').reverse().join('/')}</td>
+                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{formatarDataBR(l.data)}</td>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{l.descricao}</td>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
                     <Badge color={categoriaBadge[l.categoria] ?? 'gray'}>{categoriaLabel[l.categoria] ?? l.categoria}</Badge>
@@ -161,6 +166,7 @@ export function Financeiro() {
             })}
           </tbody>
         </table>
+        )}
       </Card>
 
       <Modal

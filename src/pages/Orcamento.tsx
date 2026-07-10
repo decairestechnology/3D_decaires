@@ -25,7 +25,8 @@ function novoItem(): ItemOrcamento {
 
 export function Orcamento() {
   const { data, loading, error } = useApi<MaterialApiRow[]>('/api/materiais', [])
-  const usandoMock = !loading && (error || data.length === 0)
+  const usandoMock = !loading && !!error
+  const vazio = !loading && !error && data.length === 0
   const materiais = usandoMock
     ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, precoKg: m.precoKg }))
     : data.map(m => ({ id: m.id, nome: m.nome, precoKg: Number(m.preco_kg) }))
@@ -119,6 +120,14 @@ export function Orcamento() {
       <h1 className="text-2xl font-semibold m-0">Orçamento</h1>
       <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Monta orçamentos com uma ou várias peças {usandoMock && '(materiais de exemplo)'}</p>
 
+      {vazio ? (
+        <Card>
+          <div className="text-center py-8 text-sm text-[var(--muted-foreground)]">
+            Você ainda não cadastrou nenhum material. Vai em <b>Estoque → Novo material</b> primeiro — o orçamento precisa saber o preço do filamento pra calcular.
+          </div>
+        </Card>
+      ) : (
+      <>
       <Card className="mb-4">
         <div className="grid grid-cols-3 gap-x-4">
           <div><Label>Cliente (opcional)</Label><Input placeholder="Nome do cliente" value={clienteNome} onChange={e => setClienteNome(e.target.value)} /></div>
@@ -195,6 +204,8 @@ export function Orcamento() {
           <Button variant="whatsapp" className="w-full mt-2" onClick={enviarWhatsApp}>Enviar por WhatsApp</Button>
         </Card>
       </div>
+      </>
+      )}
     </div>
   )
 }
