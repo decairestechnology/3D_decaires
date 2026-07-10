@@ -1,14 +1,24 @@
 import { useMemo, useState } from 'react'
-import { Send, Plus, Trash2 } from 'lucide-react'
+import { Send, Plus, Trash2, Save, PackageCheck } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
+import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input, Select } from '@/components/ui/Input'
 import { formatMoney } from '@/components/ui/Money'
 import { useApi } from '@/lib/useApi'
+import { api } from '@/lib/api'
+import { formatarDataBR } from '@/lib/date'
 import { materiais as materiaisMock } from '@/data/mockData'
 import { carregarPreferencias } from '@/lib/settings'
 
 interface MaterialApiRow { id: string; nome: string; preco_kg: string }
+interface ClienteApiRow { id: string; nome: string }
+interface ItemSalvo { nome: string; quantidade: number; valor: number }
+interface OrcamentoSalvoApiRow {
+  id: string; cliente_id: string | null; cliente_nome: string | null
+  itens: ItemSalvo[]; valor_total: string; convertido: boolean; criado_em: string
+}
 
 interface ItemOrcamento {
   id: string
@@ -31,12 +41,20 @@ export function Orcamento() {
     ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, precoKg: m.precoKg }))
     : data.map(m => ({ id: m.id, nome: m.nome, precoKg: Number(m.preco_kg) }))
 
+  const { data: clientesApi } = useApi<ClienteApiRow[]>('/api/clientes', [])
+  const { data: salvosApi, reload: reloadSalvos } = useApi<OrcamentoSalvoApiRow[]>('/api/orcamentos', [])
+
   const prefs = carregarPreferencias()
 
-  const [clienteNome, setClienteNome] = useState('')
+  const [clienteId, setClienteId] = useState('')
   const [custoEnergiaHora, setCustoEnergiaHora] = useState(prefs.custoEnergiaPadrao)
   const [margem, setMargem] = useState(prefs.margemPadrao)
   const [itens, setItens] = useState<ItemOrcamento[]>([novoItem()])
+  const [salvando, setSalvando] = useState(false)
+  const [convertendoId, setConvertendoId] = useState<string | null>(null)
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
+
+  const clienteNome = clientesApi.find(c => c.id === clienteId)?.nome ?? ''
 
   function atualizarItem(id: string, campo: keyof ItemOrcamento, valor: string | number) {
     setItens(lista => lista.map(it => (it.id === id ? { ...it, [campo]: valor } : it)))
@@ -57,7 +75,8 @@ export function Orcamento() {
       const custoTotal = custoMaterial + custoEnergia
       const precoUnitario = custoTotal * (1 + margemNum)
       const qtd = parseFloat(it.quantidade.replace(',', '.')) || 1
-      return { item: it, custoMaterial, custoEnergia, precoUnitario, precoLinha: precoUnitario * qtd, qtd }
+      const precoLinha = precoUnitario * qtd
+      return { item: it, custoMaterial, custoEnergia, precoUnitario, precoLinha, qtd, lucroLinha: precoLinha - custoTotal * qtd }
     })
 
     return { linhas, total: linhas.reduce((s, l) => s + l.precoLinha, 0) }
@@ -115,6 +134,70 @@ export function Orcamento() {
     setTimeout(() => janela.print(), 300)
   }
 
+  async function salvarOrcamento() {
+    setSalvando(true)
+    try {
+      const itensSalvos: ItemSalvo[] = calculo.linhas.map(l => ({
+        nome: l.item.nome || 'Peça personalizada',
+        quantidade: l.qtd,
+        valor: l.precoLinha
+      }))
+      await api.post('/api/orcamentos', {
+        cliente_id: clienteId || null,
+        itens: itensSalvos,
+        margem: Number(margem.replace(',', '.')) || 0,
+        custo_energia_hora: Number(custoEnergiaHora.replace(',', '.')) || 0,
+        valor_total: calculo.total
+      })
+      reloadSalvos()
+      alert('Orçamento salvo! Ele aparece na lista abaixo — dá pra transformar em pedido quando o cliente aprovar.')
+    } catch (err) {
+      console.error('[Salvar orçamento] erro:', err)
+      alert('Não deu pra salvar o orçamento — confere a conexão com o banco.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function virarPedido(orc: OrcamentoSalvoApiRow) {
+    if (!orc.cliente_id) {
+      alert('Esse orçamento não tem cliente vinculado — edita ele com um cliente selecionado antes de virar pedido.')
+      return
+    }
+    setConvertendoId(orc.id)
+    try {
+      for (const item of orc.itens) {
+        await api.post('/api/pedidos', {
+          cliente_id: orc.cliente_id,
+          peca: item.quantidade > 1 ? `${item.nome} (x${item.quantidade})` : item.nome,
+          material: null,
+          valor: item.valor,
+          prazo: null,
+          status: 'orcamento'
+        })
+      }
+      await api.patch(`/api/orcamentos?id=${orc.id}`, { convertido: true })
+      reloadSalvos()
+      alert('Pronto! Os itens desse orçamento agora estão em Pedidos, na coluna "Orçamento".')
+    } catch (err) {
+      console.error('[Virar pedido] erro:', err)
+      alert('Não deu pra transformar em pedido — confere a conexão com o banco.')
+    } finally {
+      setConvertendoId(null)
+    }
+  }
+
+  async function excluirSalvo(id: string) {
+    try {
+      await api.del(`/api/orcamentos?id=${id}`)
+      setConfirmandoId(null)
+      reloadSalvos()
+    } catch (err) {
+      console.error('[Excluir orçamento] erro:', err)
+      alert('Não deu pra excluir.')
+    }
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-semibold m-0">Orçamento</h1>
@@ -130,7 +213,13 @@ export function Orcamento() {
       <>
       <Card className="mb-4">
         <div className="grid grid-cols-3 gap-x-4">
-          <div><Label>Cliente (opcional)</Label><Input placeholder="Nome do cliente" value={clienteNome} onChange={e => setClienteNome(e.target.value)} /></div>
+          <div>
+            <Label>Cliente (opcional)</Label>
+            <Select value={clienteId} onChange={e => setClienteId(e.target.value)}>
+              <option value="">Sem cliente vinculado</option>
+              {clientesApi.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </Select>
+          </div>
           <div><Label>Margem de lucro (%)</Label><Input value={margem} onChange={e => setMargem(e.target.value)} /></div>
           <div><Label>Custo energia (R$/h)</Label><Input value={custoEnergiaHora} onChange={e => setCustoEnergiaHora(e.target.value)} /></div>
         </div>
@@ -168,10 +257,11 @@ export function Orcamento() {
                   <div><Label>Tempo de impressão (h)</Label><Input value={it.horas} onChange={e => atualizarItem(it.id, 'horas', e.target.value)} /></div>
                   <div><Label>Quantidade</Label><Input value={it.quantidade} onChange={e => atualizarItem(it.id, 'quantidade', e.target.value)} /></div>
                 </div>
-                <div className="flex justify-between text-xs text-[var(--muted-foreground)] bg-[var(--muted)] rounded-lg px-3 py-2 mt-1">
+                <div className="flex justify-between flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)] bg-[var(--muted)] rounded-lg px-3 py-2 mt-1">
                   <span>Custo material: {formatMoney(linha?.custoMaterial ?? 0)}</span>
                   <span>Custo energia: {formatMoney(linha?.custoEnergia ?? 0)}</span>
                   <span>Preço/un.: {formatMoney(linha?.precoUnitario ?? 0)}</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">Lucro: {formatMoney(linha?.lucroLinha ?? 0)}</span>
                 </div>
               </Card>
             )
@@ -180,16 +270,11 @@ export function Orcamento() {
         </div>
 
         <Card className="flex-1 min-w-[280px] sticky top-4">
-          <div className="font-bold mb-2.5">Resumo do orçamento (sua visão)</div>
+          <div className="font-bold mb-2.5">Resumo do orçamento</div>
           {calculo.linhas.map((l, i) => (
-            <div key={l.item.id} className="text-[13px] py-1.5 border-b border-[var(--border)]">
-              <div className="flex justify-between font-semibold">
-                <span>{l.item.nome || `Peça ${i + 1}`} {l.qtd > 1 ? `(x${l.qtd})` : ''}</span>
-                <span>{formatMoney(l.precoLinha)}</span>
-              </div>
-              <div className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
-                custo: {formatMoney((l.custoMaterial + l.custoEnergia) * l.qtd)} · lucro: {formatMoney(l.precoLinha - (l.custoMaterial + l.custoEnergia) * l.qtd)}
-              </div>
+            <div key={l.item.id} className="flex justify-between text-[13px] py-1.5 border-b border-[var(--border)]">
+              <span>{l.item.nome || `Peça ${i + 1}`} {l.qtd > 1 ? `(x${l.qtd})` : ''}</span>
+              <span>{formatMoney(l.precoLinha)}</span>
             </div>
           ))}
           <div className="bg-[var(--accent)] rounded-xl p-4 mt-3">
@@ -197,13 +282,52 @@ export function Orcamento() {
             <div className="text-2xl font-extrabold text-[var(--secondary)]">{formatMoney(calculo.total)}</div>
             <div className="text-xs text-[var(--muted-foreground)] mt-1">
               Custo total: {formatMoney(calculo.linhas.reduce((s, l) => s + (l.custoMaterial + l.custoEnergia) * l.qtd, 0))}
-              {' · '}Lucro estimado: {formatMoney(calculo.total - calculo.linhas.reduce((s, l) => s + (l.custoMaterial + l.custoEnergia) * l.qtd, 0))}
+              {' · '}Lucro estimado: {formatMoney(calculo.linhas.reduce((s, l) => s + l.lucroLinha, 0))}
             </div>
           </div>
-          <Button variant="gradient" className="w-full mt-3.5" onClick={gerarPdf}><Send size={15} />Gerar orçamento PDF</Button>
+          <Button variant="primary" className="w-full mt-3.5" onClick={salvarOrcamento} disabled={salvando}>
+            <Save size={15} />{salvando ? 'Salvando...' : 'Salvar orçamento'}
+          </Button>
+          <Button variant="gradient" className="w-full mt-2" onClick={gerarPdf}><Send size={15} />Gerar orçamento PDF</Button>
           <Button variant="whatsapp" className="w-full mt-2" onClick={enviarWhatsApp}>Enviar por WhatsApp</Button>
         </Card>
       </div>
+
+      {salvosApi.length > 0 && (
+        <>
+          <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Orçamentos salvos</h2>
+          <Card className="p-0">
+            {salvosApi.map((o, i) => {
+              const last = i === salvosApi.length - 1
+              return (
+                <div key={o.id} className={`flex items-center gap-3 px-4 py-3 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
+                  <div className="flex-1">
+                    <div className="text-[13.5px] font-bold">{o.cliente_nome ?? 'Sem cliente'}</div>
+                    <div className="text-xs text-[var(--muted-foreground)]">
+                      {o.itens.map(it => it.nome).join(', ')} · {formatarDataBR(o.criado_em)}
+                    </div>
+                  </div>
+                  <div className="text-sm font-bold">{formatMoney(Number(o.valor_total))}</div>
+                  {confirmandoId === o.id ? (
+                    <InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluirSalvo(o.id)} />
+                  ) : o.convertido ? (
+                    <Badge color="green">Virou pedido</Badge>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" onClick={() => virarPedido(o)} disabled={convertendoId === o.id}>
+                        <PackageCheck size={14} />{convertendoId === o.id ? 'Convertendo...' : 'Virar pedido'}
+                      </Button>
+                      <button onClick={() => setConfirmandoId(o.id)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </Card>
+        </>
+      )}
       </>
       )}
     </div>
