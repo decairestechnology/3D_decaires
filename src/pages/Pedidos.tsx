@@ -1,8 +1,10 @@
-import { useState, FormEvent } from 'react'
-import { Plus } from 'lucide-react'
+import { useState, useEffect, FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
+import { Plus, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Money } from '@/components/ui/Money'
 import { Modal } from '@/components/ui/Modal'
+import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input, Select } from '@/components/ui/Input'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
@@ -17,10 +19,10 @@ const colunas: { status: StatusPedido; titulo: string }[] = [
 ]
 
 const proximoStatus: Record<StatusPedido, StatusPedido | null> = {
-  orcamento: 'producao',
-  producao: 'pronto',
-  pronto: 'entregue',
-  entregue: null
+  orcamento: 'producao', producao: 'pronto', pronto: 'entregue', entregue: null
+}
+const statusAnterior: Record<StatusPedido, StatusPedido | null> = {
+  orcamento: null, producao: 'orcamento', pronto: 'producao', entregue: 'pronto'
 }
 
 interface PedidoApiRow {
@@ -33,18 +35,24 @@ interface PedidoApiRow {
   status: StatusPedido
 }
 
-interface ClienteApiRow {
-  id: string
-  nome: string
-}
+interface ClienteApiRow { id: string; nome: string }
 
 export function Pedidos() {
+  const location = useLocation()
   const { data, loading, error, reload } = useApi<PedidoApiRow[]>('/api/pedidos', [])
   const { data: clientesApi } = useApi<ClienteApiRow[]>('/api/clientes', [])
 
   const [modalOpen, setModalOpen] = useState(false)
   const [salvando, setSalvando] = useState(false)
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState({ cliente_id: '', peca: '', material: 'PLA', quantidade: '1', valor: '', prazo: '', status: 'orcamento' as StatusPedido })
+
+  useEffect(() => {
+    if ((location.state as { abrirModal?: boolean })?.abrirModal) {
+      setModalOpen(true)
+      window.history.replaceState({}, '')
+    }
+  }, [location.state])
 
   const usandoMock = !loading && (error || data.length === 0)
   const pedidos = usandoMock
@@ -53,11 +61,22 @@ export function Pedidos() {
 
   const clientesOptions = clientesApi.length > 0 ? clientesApi : clientesMock.map(c => ({ id: c.id, nome: c.nome }))
 
-  async function avancarStatus(id: string, atual: StatusPedido) {
-    const proximo = proximoStatus[atual]
-    if (!proximo || usandoMock) return
-    await api.patch(`/api/pedidos/${id}`, { status: proximo })
+  async function mudarStatus(id: string, novo: StatusPedido | null) {
+    if (!novo || usandoMock) return
+    await api.patch(`/api/pedidos/${id}`, { status: novo })
     reload()
+  }
+
+  async function excluirPedido(id: string) {
+    if (usandoMock) { setConfirmandoId(null); return }
+    try {
+      await api.del(`/api/pedidos/${id}`)
+      setConfirmandoId(null)
+      reload()
+    } catch (err) {
+      console.error('[Excluir pedido] erro:', err)
+      alert('Não deu pra excluir. Confere a conexão com o banco.')
+    }
   }
 
   async function handleSalvar(e: FormEvent) {
@@ -97,25 +116,53 @@ export function Pedidos() {
         {colunas.map(col => {
           const items = pedidos.filter(p => p.status === col.status)
           return (
-            <div key={col.status} className="bg-[var(--muted)] rounded-xl p-3 min-w-[230px] flex-1">
+            <div key={col.status} className="bg-[var(--muted)] rounded-xl p-3 min-w-[240px] flex-1">
               <div className="text-[13px] font-bold mb-2.5 flex justify-between text-[var(--muted-foreground)]">
                 {col.titulo} <span>{items.length}</span>
               </div>
               {items.map(p => (
-                <div
-                  key={p.id}
-                  onClick={() => avancarStatus(p.id, p.status)}
-                  title={proximoStatus[p.status] ? 'Clique pra avançar o status' : ''}
-                  className={`bg-[var(--card)] border border-[var(--border)] rounded-[10px] p-2.5 mb-2.5 text-[13px] shadow-sm ${proximoStatus[p.status] && !usandoMock ? 'cursor-pointer hover:border-[var(--primary)]' : ''}`}
-                >
+                <div key={p.id} className="bg-[var(--card)] border border-[var(--border)] rounded-[10px] p-2.5 mb-2.5 text-[13px] shadow-sm">
                   <div className="font-bold mb-1">{p.clienteNome}</div>
                   {p.peca}{p.material ? ` — ${p.material}` : ''}
-                  <div className="text-xs text-[var(--muted-foreground)] flex justify-between mt-1">
+                  <div className="text-xs text-[var(--muted-foreground)] flex justify-between mt-1 mb-2">
                     <Money value={p.valor} />
                     <span>{p.prazo ? p.prazo.split('-').slice(1).reverse().join('/') : '—'}</span>
                   </div>
+
+                  {confirmandoId === p.id ? (
+                    <InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluirPedido(p.id)} />
+                  ) : (
+                    <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-[var(--border)]">
+                      <div className="flex gap-1">
+                        <button
+                          disabled={!statusAnterior[p.status]}
+                          onClick={() => mudarStatus(p.id, statusAnterior[p.status])}
+                          title="Voltar fase"
+                          className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)] disabled:opacity-30"
+                        >
+                          <ChevronLeft size={14} />
+                        </button>
+                        <button
+                          disabled={!proximoStatus[p.status]}
+                          onClick={() => mudarStatus(p.id, proximoStatus[p.status])}
+                          title="Avançar fase"
+                          className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)] disabled:opacity-30"
+                        >
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => setConfirmandoId(p.id)}
+                        title="Excluir"
+                        className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
+              {items.length === 0 && <div className="text-center py-6 text-xs text-[var(--muted-foreground)]">Nenhum pedido aqui</div>}
             </div>
           )
         })}

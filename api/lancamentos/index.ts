@@ -18,10 +18,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { data, descricao, tipo, valor, pedido_id } = req.body
+    const { data, descricao, tipo, valor, pedido_id, categoria } = req.body
     const [novo] = await sql`
-      INSERT INTO lancamentos_financeiros (data, descricao, tipo, valor, pedido_id)
-      VALUES (${data}, ${descricao}, ${tipo}, ${valor}, ${pedido_id ?? null})
+      INSERT INTO lancamentos_financeiros (data, descricao, tipo, valor, pedido_id, categoria)
+      VALUES (${data}, ${descricao}, ${tipo}, ${valor}, ${pedido_id ?? null}, ${categoria ?? 'outros'})
       RETURNING *
     `
     return res.status(201).json(novo)

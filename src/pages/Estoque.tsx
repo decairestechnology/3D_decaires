@@ -1,10 +1,11 @@
 import { useState, FormEvent } from 'react'
-import { Plus, AlertTriangle, Trash2, Boxes, Banknote, TrendingUp } from 'lucide-react'
+import { Plus, AlertTriangle, Trash2, Boxes, Banknote, TrendingUp, Pencil } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Money } from '@/components/ui/Money'
 import { Modal } from '@/components/ui/Modal'
+import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input, Select } from '@/components/ui/Input'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
@@ -20,22 +21,28 @@ function statusMaterial(pct: number): { color: 'red' | 'amber' | 'green'; label:
   return { color: 'green', label: 'OK', bar: '#10B981' }
 }
 
+const formMaterialVazio = { id: '', nome: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000' }
+const formProdutoVazio = { id: '', nome: '', material: '', quantidade: '1', custo_unitario: '', preco_venda: '' }
+
 export function Estoque() {
   const [aba, setAba] = useState<'materia' | 'produtos'>('materia')
   const [modalOpen, setModalOpen] = useState(false)
   const [salvando, setSalvando] = useState(false)
-  const [formMaterial, setFormMaterial] = useState({ nome: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000' })
-  const [formProduto, setFormProduto] = useState({ nome: '', material: '', quantidade: '1', custo_unitario: '', preco_venda: '' })
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
+  const [formMaterial, setFormMaterial] = useState(formMaterialVazio)
+  const [formProduto, setFormProduto] = useState(formProdutoVazio)
 
   const { data: matApi, loading: matLoading, error: matError, reload: reloadMat } = useApi<MaterialApiRow[]>('/api/materiais', [])
   const { data: prodApi, loading: prodLoading, error: prodError, reload: reloadProd } = useApi<ProdutoApiRow[]>('/api/produtos-prontos', [])
   const { data: perdasApi } = useApi<PerdaApiRow[]>('/api/perdas', [])
 
-  const materiais = (!matLoading && (matError || matApi.length === 0))
-    ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, estoqueG: m.estoqueG, capacidadeG: m.capacidadeG }))
-    : matApi.map(m => ({ id: m.id, nome: m.nome, estoqueG: Number(m.estoque_g), capacidadeG: Number(m.capacidade_g) }))
+  const matMock = !matLoading && (matError || matApi.length === 0)
+  const materiais = matMock
+    ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, estoqueG: m.estoqueG, capacidadeG: m.capacidadeG, precoKg: m.precoKg }))
+    : matApi.map(m => ({ id: m.id, nome: m.nome, estoqueG: Number(m.estoque_g), capacidadeG: Number(m.capacidade_g), precoKg: Number(m.preco_kg) }))
 
-  const produtos = (!prodLoading && (prodError || prodApi.length === 0))
+  const prodMock = !prodLoading && (prodError || prodApi.length === 0)
+  const produtos = prodMock
     ? produtosMock
     : prodApi.map(p => ({ id: p.id, nome: p.nome, material: p.material ?? '', quantidade: p.quantidade, custoUnitario: Number(p.custo_unitario), precoVenda: Number(p.preco_venda) }))
 
@@ -48,19 +55,35 @@ export function Estoque() {
 
   const baixos = materiais.filter(m => (m.estoqueG / m.capacidadeG) * 100 <= 20)
 
+  function abrirNovo() {
+    if (aba === 'materia') setFormMaterial(formMaterialVazio)
+    else setFormProduto(formProdutoVazio)
+    setModalOpen(true)
+  }
+  function abrirEdicaoMaterial(m: typeof materiais[number]) {
+    setFormMaterial({ id: m.id, nome: m.nome, preco_kg: String(m.precoKg).replace('.', ','), estoque_g: String(m.estoqueG), capacidade_g: String(m.capacidadeG) })
+    setModalOpen(true)
+  }
+  function abrirEdicaoProduto(p: typeof produtos[number]) {
+    setFormProduto({ id: p.id, nome: p.nome, material: p.material, quantidade: String(p.quantidade), custo_unitario: String(p.custoUnitario).replace('.', ','), preco_venda: String(p.precoVenda).replace('.', ',') })
+    setModalOpen(true)
+  }
+
   async function handleSalvarMaterial(e: FormEvent) {
     e.preventDefault()
     if (!formMaterial.nome.trim()) return
     setSalvando(true)
     try {
-      await api.post('/api/materiais', {
+      const payload = {
         nome: formMaterial.nome,
         preco_kg: Number(formMaterial.preco_kg.replace(',', '.')) || 0,
         estoque_g: Number(formMaterial.estoque_g) || 0,
         capacidade_g: Number(formMaterial.capacidade_g) || 1000
-      })
+      }
+      if (formMaterial.id) await api.patch(`/api/materiais/${formMaterial.id}`, payload)
+      else await api.post('/api/materiais', payload)
       setModalOpen(false)
-      setFormMaterial({ nome: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000' })
+      setFormMaterial(formMaterialVazio)
       reloadMat()
     } catch (err) {
       console.error('[Salvar] erro:', err)
@@ -75,15 +98,17 @@ export function Estoque() {
     if (!formProduto.nome.trim()) return
     setSalvando(true)
     try {
-      await api.post('/api/produtos-prontos', {
+      const payload = {
         nome: formProduto.nome,
         material: formProduto.material || null,
         quantidade: Number(formProduto.quantidade) || 0,
         custo_unitario: Number(formProduto.custo_unitario.replace(',', '.')) || 0,
         preco_venda: Number(formProduto.preco_venda.replace(',', '.')) || 0
-      })
+      }
+      if (formProduto.id) await api.patch(`/api/produtos-prontos/${formProduto.id}`, payload)
+      else await api.post('/api/produtos-prontos', payload)
       setModalOpen(false)
-      setFormProduto({ nome: '', material: '', quantidade: '1', custo_unitario: '', preco_venda: '' })
+      setFormProduto(formProdutoVazio)
       reloadProd()
     } catch (err) {
       console.error('[Salvar] erro:', err)
@@ -93,6 +118,15 @@ export function Estoque() {
     }
   }
 
+  async function excluirMaterial(id: string) {
+    try { await api.del(`/api/materiais/${id}`); setConfirmandoId(null); reloadMat() }
+    catch (err) { console.error('[Excluir] erro:', err); alert('Não deu pra excluir.') }
+  }
+  async function excluirProduto(id: string) {
+    try { await api.del(`/api/produtos-prontos/${id}`); setConfirmandoId(null); reloadProd() }
+    catch (err) { console.error('[Excluir] erro:', err); alert('Não deu pra excluir.') }
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-3.5">
@@ -100,7 +134,7 @@ export function Estoque() {
           <h1 className="text-2xl font-semibold m-0">Estoque</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Matéria-prima e produtos prontos</p>
         </div>
-        <Button variant="gradient" onClick={() => setModalOpen(true)}>
+        <Button variant="gradient" onClick={abrirNovo}>
           <Plus size={15} />{aba === 'materia' ? 'Novo material' : 'Novo produto pronto'}
         </Button>
       </div>
@@ -131,14 +165,28 @@ export function Estoque() {
               const s = statusMaterial(pct)
               return (
                 <Card key={m.id} className="flex-1 min-w-[220px]">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-start">
                     <b className="text-sm">{m.nome}</b>
-                    <Badge color={s.color}>{s.label}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge color={s.color}>{s.label}</Badge>
+                      {!matMock && confirmandoId !== m.id && (
+                        <div className="flex gap-1">
+                          <button onClick={() => abrirEdicaoMaterial(m)} className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]"><Pencil size={12} /></button>
+                          <button onClick={() => setConfirmandoId(m.id)} className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600"><Trash2 size={12} /></button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xs text-[var(--muted-foreground)] mt-1">{m.estoqueG}g restantes de {m.capacidadeG / 1000}kg</div>
-                  <div className="h-1.5 rounded-full bg-[var(--border)] overflow-hidden mt-1.5">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.bar }} />
-                  </div>
+                  {confirmandoId === m.id ? (
+                    <div className="mt-2"><InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluirMaterial(m.id)} /></div>
+                  ) : (
+                    <>
+                      <div className="text-xs text-[var(--muted-foreground)] mt-1">{m.estoqueG}g restantes de {m.capacidadeG / 1000}kg</div>
+                      <div className="h-1.5 rounded-full bg-[var(--border)] overflow-hidden mt-1.5">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.bar }} />
+                      </div>
+                    </>
+                  )}
                 </Card>
               )
             })}
@@ -201,21 +249,35 @@ export function Estoque() {
                   <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]">Custo/un.</th>
                   <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]">Preço venda</th>
                   <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]"></th>
+                  <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]"></th>
                 </tr>
               </thead>
               <tbody>
-                {produtos.map((p, i) => (
-                  <tr key={p.id}>
-                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.nome}</td>
-                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.material}</td>
-                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.quantidade}</td>
-                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}><Money value={p.custoUnitario} /></td>
-                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}><Money value={p.precoVenda} /></td>
-                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>
-                      <Badge color={p.quantidade <= 1 ? 'amber' : 'green'}>{p.quantidade <= 1 ? 'Última unidade' : 'Disponível'}</Badge>
-                    </td>
-                  </tr>
-                ))}
+                {produtos.map((p, i) => {
+                  const last = i === produtos.length - 1
+                  return (
+                    <tr key={p.id}>
+                      <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.nome}</td>
+                      <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.material}</td>
+                      <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.quantidade}</td>
+                      <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}><Money value={p.custoUnitario} /></td>
+                      <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}><Money value={p.precoVenda} /></td>
+                      <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
+                        <Badge color={p.quantidade <= 1 ? 'amber' : 'green'}>{p.quantidade <= 1 ? 'Última unidade' : 'Disponível'}</Badge>
+                      </td>
+                      <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
+                        {confirmandoId === p.id ? (
+                          <InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluirProduto(p.id)} />
+                        ) : !prodMock && (
+                          <div className="flex gap-1">
+                            <button onClick={() => abrirEdicaoProduto(p)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]"><Pencil size={13} /></button>
+                            <button onClick={() => setConfirmandoId(p.id)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600"><Trash2 size={13} /></button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </Card>
@@ -228,15 +290,15 @@ export function Estoque() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={aba === 'materia' ? 'Novo material' : 'Novo produto pronto'}
+        title={
+          aba === 'materia'
+            ? (formMaterial.id ? 'Editar material' : 'Novo material')
+            : (formProduto.id ? 'Editar produto' : 'Novo produto pronto')
+        }
         footer={
           <>
             <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button
-              variant="gradient"
-              disabled={salvando}
-              onClick={aba === 'materia' ? handleSalvarMaterial : handleSalvarProduto}
-            >
+            <Button variant="gradient" disabled={salvando} onClick={aba === 'materia' ? handleSalvarMaterial : handleSalvarProduto}>
               <Plus size={15} />{salvando ? 'Salvando...' : 'Salvar'}
             </Button>
           </>

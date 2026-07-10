@@ -1,22 +1,18 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Wrench, Banknote, AlertTriangle } from 'lucide-react'
+import { Plus, Wrench, Banknote, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Money } from '@/components/ui/Money'
 import { Modal } from '@/components/ui/Modal'
+import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input, Select } from '@/components/ui/Input'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { equipamentos as equipamentosMock } from '@/data/mockData'
 
 interface EquipamentoApiRow {
-  id: string
-  nome: string
-  tipo: 'impressora' | 'ferramenta'
-  valor: string
-  aquisicao: string
-  status: string
+  id: string; nome: string; tipo: 'impressora' | 'ferramenta'; valor: string; aquisicao: string; status: string
 }
 
 function badgeColor(status: string): 'green' | 'amber' | 'gray' {
@@ -25,11 +21,14 @@ function badgeColor(status: string): 'green' | 'amber' | 'gray' {
   return 'gray'
 }
 
+const formVazio = { id: '', nome: '', tipo: 'impressora', valor: '', aquisicao: '', status: 'OK' }
+
 export function Maquinario() {
   const { data, loading, error, reload } = useApi<EquipamentoApiRow[]>('/api/equipamentos', [])
   const [modalOpen, setModalOpen] = useState(false)
   const [salvando, setSalvando] = useState(false)
-  const [form, setForm] = useState({ nome: '', tipo: 'impressora', valor: '', aquisicao: '', status: 'OK' })
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
+  const [form, setForm] = useState(formVazio)
 
   const usandoMock = !loading && (error || data.length === 0)
   const equipamentos = usandoMock
@@ -41,26 +40,42 @@ export function Maquinario() {
   const totalInvestido = equipamentos.reduce((s, e) => s + e.valor, 0)
   const pendentes = equipamentos.filter(e => e.status.toLowerCase().includes('pendente') || e.status.toLowerCase().includes('desgast'))
 
+  function abrirNovo() { setForm(formVazio); setModalOpen(true) }
+  function abrirEdicao(e: typeof equipamentos[number]) {
+    setForm({ id: e.id, nome: e.nome, tipo: e.tipo, valor: String(e.valor).replace('.', ','), aquisicao: e.aquisicao?.slice(0, 10) ?? '', status: e.status })
+    setModalOpen(true)
+  }
+
   async function handleSalvar(e: FormEvent) {
     e.preventDefault()
     if (!form.nome.trim()) return
     setSalvando(true)
     try {
-      await api.post('/api/equipamentos', {
-        nome: form.nome,
-        tipo: form.tipo,
-        valor: Number(form.valor.replace(',', '.')) || 0,
-        aquisicao: form.aquisicao || null,
-        status: form.status
-      })
+      const payload = {
+        nome: form.nome, tipo: form.tipo, valor: Number(form.valor.replace(',', '.')) || 0,
+        aquisicao: form.aquisicao || null, status: form.status
+      }
+      if (form.id) await api.patch(`/api/equipamentos/${form.id}`, payload)
+      else await api.post('/api/equipamentos', payload)
       setModalOpen(false)
-      setForm({ nome: '', tipo: 'impressora', valor: '', aquisicao: '', status: 'OK' })
+      setForm(formVazio)
       reload()
     } catch (err) {
       console.error('[Salvar] erro:', err)
       alert('Não deu pra salvar — confere se o banco (Neon) está conectado e as variáveis de ambiente configuradas.')
     } finally {
       setSalvando(false)
+    }
+  }
+
+  async function excluir(id: string) {
+    try {
+      await api.del(`/api/equipamentos/${id}`)
+      setConfirmandoId(null)
+      reload()
+    } catch (err) {
+      console.error('[Excluir] erro:', err)
+      alert('Não deu pra excluir. Confere a conexão com o banco.')
     }
   }
 
@@ -71,7 +86,7 @@ export function Maquinario() {
           <h1 className="text-2xl font-semibold m-0">Maquinário e ferramentas</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Seus equipamentos, valor investido e manutenção {usandoMock && '(dados de exemplo)'}</p>
         </div>
-        <Button variant="gradient" onClick={() => setModalOpen(true)}><Plus size={15} />Novo equipamento</Button>
+        <Button variant="gradient" onClick={abrirNovo}><Plus size={15} />Novo equipamento</Button>
       </div>
 
       <div className="flex gap-4 flex-wrap">
@@ -93,12 +108,21 @@ export function Maquinario() {
       <div className="flex gap-4 flex-wrap">
         {impressoras.map(e => (
           <Card key={e.id} className="flex-1 min-w-[260px]">
-            <div className="flex justify-between">
+            <div className="flex justify-between items-start">
               <b className="text-sm">{e.nome}</b>
-              <Badge color={badgeColor(e.status)}>{e.status}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge color={badgeColor(e.status)}>{e.status}</Badge>
+                {confirmandoId === e.id ? null : !usandoMock && (
+                  <div className="flex gap-1">
+                    <button onClick={() => abrirEdicao(e)} className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]"><Pencil size={12} /></button>
+                    <button onClick={() => setConfirmandoId(e.id)} className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600"><Trash2 size={12} /></button>
+                  </div>
+                )}
+              </div>
             </div>
+            {confirmandoId === e.id && <div className="mt-2"><InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluir(e.id)} /></div>}
             <div className="text-xs text-[var(--muted-foreground)] mt-1.5">
-              Comprada em {e.aquisicao.split('-').reverse().join('/')} · <Money value={e.valor} />
+              Comprada em {e.aquisicao?.split('-').reverse().join('/')} · <Money value={e.valor} />
             </div>
           </Card>
         ))}
@@ -113,17 +137,31 @@ export function Maquinario() {
               <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]">Valor</th>
               <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]">Aquisição</th>
               <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]">Status</th>
+              <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]"></th>
             </tr>
           </thead>
           <tbody>
-            {ferramentas.map((e, i) => (
-              <tr key={e.id}>
-                <td className={`px-2.5 py-2.5 ${i < ferramentas.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{e.nome}</td>
-                <td className={`px-2.5 py-2.5 ${i < ferramentas.length - 1 ? 'border-b border-[var(--border)]' : ''}`}><Money value={e.valor} /></td>
-                <td className={`px-2.5 py-2.5 ${i < ferramentas.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{e.aquisicao.slice(0, 7).split('-').reverse().join('/')}</td>
-                <td className={`px-2.5 py-2.5 ${i < ferramentas.length - 1 ? 'border-b border-[var(--border)]' : ''}`}><Badge color={badgeColor(e.status)}>{e.status}</Badge></td>
-              </tr>
-            ))}
+            {ferramentas.map((e, i) => {
+              const last = i === ferramentas.length - 1
+              return (
+                <tr key={e.id}>
+                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{e.nome}</td>
+                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}><Money value={e.valor} /></td>
+                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{e.aquisicao?.slice(0, 7).split('-').reverse().join('/')}</td>
+                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}><Badge color={badgeColor(e.status)}>{e.status}</Badge></td>
+                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
+                    {confirmandoId === e.id ? (
+                      <InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluir(e.id)} />
+                    ) : !usandoMock && (
+                      <div className="flex gap-1">
+                        <button onClick={() => abrirEdicao(e)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]"><Pencil size={13} /></button>
+                        <button onClick={() => setConfirmandoId(e.id)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600"><Trash2 size={13} /></button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </Card>
@@ -131,7 +169,7 @@ export function Maquinario() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Novo equipamento"
+        title={form.id ? 'Editar equipamento' : 'Novo equipamento'}
         footer={
           <>
             <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancelar</Button>

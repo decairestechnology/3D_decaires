@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { Package, Banknote, TrendingUp, AlertTriangle, Printer } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -22,6 +23,7 @@ interface PedidoApiRow {
 }
 
 export function Dashboard() {
+  const navigate = useNavigate()
   const { data, loading, error } = useApi<PedidoApiRow[]>('/api/pedidos', [])
   const usandoMock = !loading && (error || data.length === 0)
   const pedidos = usandoMock
@@ -34,7 +36,7 @@ export function Dashboard() {
           <h1 className="text-2xl font-semibold m-0">Dashboard</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Resumo geral da operação</p>
         </div>
-        <Button variant="gradient"><Package size={15} />Novo pedido</Button>
+        <Button variant="gradient" onClick={() => navigate('/pedidos', { state: { abrirModal: true } })}><Package size={15} />Novo pedido</Button>
       </div>
 
       <div className="flex gap-4 flex-wrap">

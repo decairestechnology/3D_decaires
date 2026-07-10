@@ -4,16 +4,25 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Label, Input } from '@/components/ui/Input'
 import { formatMoney } from '@/components/ui/Money'
+import { useApi } from '@/lib/useApi'
+import { lancamentos as lancamentosMock } from '@/data/mockData'
 
-const saldoMensal = [55, 70, 40, 85, 65, 100]
-const distribuicao = [
-  { nome: 'Filamento', pct: 58 },
-  { nome: 'Energia', pct: 22 },
-  { nome: 'Manutenção', pct: 12 },
-  { nome: 'Outros', pct: 8 }
-]
+interface LancamentoApiRow {
+  id: string; data: string; descricao: string; tipo: 'receita' | 'despesa'; valor: string; categoria?: string
+}
+
+const categoriaLabel: Record<string, string> = {
+  vendas: 'Vendas', materiais: 'Materiais', energia: 'Energia', manutencao: 'Manutenção', outros: 'Outros'
+}
+const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 export function Relatorios() {
+  const { data, loading, error } = useApi<LancamentoApiRow[]>('/api/lancamentos', [])
+  const usandoMock = !loading && (error || data.length === 0)
+  const lancamentos = usandoMock
+    ? lancamentosMock.map(l => ({ ...l, categoria: l.tipo === 'receita' ? 'vendas' : 'outros' }))
+    : data.map(l => ({ id: l.id, data: l.data, descricao: l.descricao, tipo: l.tipo, valor: Number(l.valor), categoria: l.categoria ?? 'outros' }))
+
   const [periodo, setPeriodo] = useState<'3' | '6'>('6')
   const [analise, setAnalise] = useState('Peça pra Scout ler os números do período e apontar o que se destaca.')
 
@@ -30,12 +39,41 @@ export function Relatorios() {
     return { kwh, custoHora, custoTotal: kwh * t }
   }, [potencia, horas, tarifa])
 
+  const saldoMensal = useMemo(() => {
+    const nMeses = Number(periodo)
+    const hoje = new Date('2026-07-10')
+    const meses: { chave: string; label: string; saldo: number }[] = []
+    for (let i = nMeses - 1; i >= 0; i--) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+      const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      meses.push({ chave, label: mesesNomes[d.getMonth()], saldo: 0 })
+    }
+    lancamentos.forEach(l => {
+      const chave = l.data.slice(0, 7)
+      const mes = meses.find(m => m.chave === chave)
+      if (mes) mes.saldo += l.tipo === 'receita' ? l.valor : -l.valor
+    })
+    const maxAbs = Math.max(...meses.map(m => Math.abs(m.saldo)), 1)
+    return meses.map(m => ({ ...m, pct: Math.max((Math.abs(m.saldo) / maxAbs) * 100, 4) }))
+  }, [lancamentos, periodo])
+
+  const distribuicaoGastos = useMemo(() => {
+    const totais: Record<string, number> = {}
+    lancamentos.filter(l => l.tipo === 'despesa').forEach(l => {
+      totais[l.categoria] = (totais[l.categoria] ?? 0) + l.valor
+    })
+    const totalGeral = Object.values(totais).reduce((s, v) => s + v, 0)
+    return Object.entries(totais)
+      .map(([cat, valor]) => ({ categoria: categoriaLabel[cat] ?? cat, valor, pct: totalGeral > 0 ? Math.round((valor / totalGeral) * 100) : 0 }))
+      .sort((a, b) => b.valor - a.valor)
+  }, [lancamentos])
+
   return (
     <div>
       <div className="flex justify-between items-center mb-5">
         <div>
           <h1 className="text-2xl font-semibold m-0">Relatórios</h1>
-          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Como o período selecionado se comportou</p>
+          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Como o período selecionado se comportou {usandoMock && '(dados de exemplo)'}</p>
         </div>
         <Button variant="gradient"><Download size={15} />Baixar PDF</Button>
       </div>
@@ -64,7 +102,7 @@ export function Relatorios() {
           </div>
         </div>
         <span
-          onClick={() => setAnalise('Seu lucro cresceu 18% no período. Filamento segue como maior custo (58%) — vale negociar compra em maior volume pra reduzir o preço por kg.')}
+          onClick={() => setAnalise('Peça isso na barra da Scout lá em cima — ela lê seus dados reais e te dá uma análise sob medida.')}
           className="text-xs font-bold text-[var(--secondary)] cursor-pointer whitespace-nowrap flex items-center gap-1"
         >
           <Sparkles size={12} /> gerar análise
@@ -75,16 +113,24 @@ export function Relatorios() {
         <Card className="flex-[2] min-w-[340px]">
           <div className="font-bold mb-1">SALDO MENSAL</div>
           <div className="flex items-end gap-3.5 h-[140px] pt-2.5">
-            {saldoMensal.map((h, i) => (
-              <div key={i} className="flex-1 rounded-t-md bg-gradient-to-b from-cyan-400 to-cyan-500 min-w-[20px]" style={{ height: `${h}%` }} />
+            {saldoMensal.map((m, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
+                <div
+                  className={`w-full rounded-t-md ${m.saldo >= 0 ? 'bg-gradient-to-b from-cyan-400 to-cyan-500' : 'bg-gradient-to-b from-red-400 to-red-500'}`}
+                  style={{ height: `${m.pct}%` }}
+                  title={formatMoney(m.saldo)}
+                />
+                <div className="text-[10px] text-[var(--muted-foreground)] mt-1 font-semibold">{m.label}</div>
+              </div>
             ))}
           </div>
         </Card>
         <Card className="flex-1 min-w-[240px]">
-          <div className="font-bold mb-1">DISTRIBUIÇÃO DE GASTOS — ESTE MÊS</div>
-          {distribuicao.map(d => (
-            <div key={d.nome} className="flex justify-between items-center py-2 border-b border-[var(--border)] last:border-none text-[13px]">
-              <span>{d.nome}</span>
+          <div className="font-bold mb-1">DISTRIBUIÇÃO DE GASTOS</div>
+          {distribuicaoGastos.length === 0 && <div className="text-xs text-[var(--muted-foreground)] py-4">Nenhuma despesa lançada ainda.</div>}
+          {distribuicaoGastos.map(d => (
+            <div key={d.categoria} className="flex justify-between items-center py-2 border-b border-[var(--border)] last:border-none text-[13px]">
+              <span>{d.categoria}</span>
               <div className="h-1.5 rounded-full bg-[var(--border)] flex-1 mx-3 overflow-hidden">
                 <div className="h-full rounded-full bg-[var(--secondary)]" style={{ width: `${d.pct}%` }} />
               </div>
