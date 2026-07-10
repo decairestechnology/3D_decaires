@@ -32,6 +32,24 @@ db/schema.sql      Schema pra rodar no Neon
 public/logo.png    Logo do sistema
 ```
 
+## Login (Firebase)
+
+O sistema agora exige login — sem usuário autenticado, redireciona pra `/login`.
+
+1. No [Firebase Console](https://console.firebase.google.com) do seu projeto → Authentication → Sign-in method → ative **Email/senha**
+2. Em Authentication → Users → **Add user**, cria seu usuário (o email/senha que você vai usar pra entrar no sistema)
+3. Pronto — não precisa de tela de cadastro, é uso próprio
+
+## Populando o banco com dados iniciais
+
+Depois de rodar `db/schema.sql` no SQL Editor do Neon, rode também `db/seed.sql` — ele insere
+os mesmos dados de exemplo que estavam no protótipo (clientes, materiais, pedidos etc.), assim
+o sistema não abre vazio na primeira vez.
+
+Enquanto uma tabela estiver vazia (ou a API falhar), cada tela cai automaticamente pros dados
+de exemplo do `mockData.ts` e mostra um aviso discreto tipo "(dados de exemplo)" — o site nunca
+quebra, só avisa que ainda não tá lendo do banco.
+
 ## Conectando o banco (Neon)
 
 1. Crie um projeto em https://neon.tech

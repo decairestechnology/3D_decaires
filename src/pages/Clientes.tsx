@@ -2,13 +2,30 @@ import { Plus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Money } from '@/components/ui/Money'
-import { clientes } from '@/data/mockData'
+import { useApi } from '@/lib/useApi'
+import { clientes as clientesMock } from '@/data/mockData'
+import { Cliente } from '@/types'
+
+interface ClienteApiRow {
+  id: string
+  nome: string
+  contato: string | null
+  pedidos: number
+  total_gasto: string
+}
 
 function iniciais(nome: string) {
   return nome.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()
 }
 
 export function Clientes() {
+  const { data, loading, error } = useApi<ClienteApiRow[]>('/api/clientes', [])
+
+  const clientes: Cliente[] =
+    !loading && !error && data.length > 0
+      ? data.map(c => ({ id: c.id, nome: c.nome, contato: c.contato ?? '—', pedidos: c.pedidos, totalGasto: Number(c.total_gasto) }))
+      : clientesMock
+
   return (
     <div>
       <div className="flex justify-between items-center mb-5">
@@ -18,6 +35,9 @@ export function Clientes() {
         </div>
         <Button variant="gradient"><Plus size={15} />Novo cliente</Button>
       </div>
+
+      {error && <div className="text-xs text-amber-600 font-semibold mb-3">{error}</div>}
+
       <Card className="p-0">
         <table className="w-full border-collapse text-[13.5px]">
           <thead>

@@ -1,12 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Send } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Label, Input, Select } from '@/components/ui/Input'
 import { formatMoney } from '@/components/ui/Money'
-import { materiais } from '@/data/mockData'
+import { useApi } from '@/lib/useApi'
+import { materiais as materiaisMock } from '@/data/mockData'
+
+interface MaterialApiRow {
+  id: string
+  nome: string
+  preco_kg: string
+}
 
 export function Orcamento() {
+  const { data, loading, error } = useApi<MaterialApiRow[]>('/api/materiais', [])
+  const usandoMock = !loading && (error || data.length === 0)
+  const materiais = usandoMock
+    ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, precoKg: m.precoKg }))
+    : data.map(m => ({ id: m.id, nome: m.nome, precoKg: Number(m.preco_kg) }))
+
   const [nome, setNome] = useState('')
   const [peso, setPeso] = useState('80')
   const [materialIdx, setMaterialIdx] = useState(0)
@@ -14,6 +27,8 @@ export function Orcamento() {
   const [custoEnergiaHora, setCustoEnergiaHora] = useState('0,45')
   const [margem, setMargem] = useState('60')
   const [quantidade, setQuantidade] = useState('1')
+
+  useEffect(() => { setMaterialIdx(0) }, [materiais.length])
 
   const resultado = useMemo(() => {
     const pesoG = parseFloat(peso.replace(',', '.')) || 0
@@ -25,7 +40,7 @@ export function Orcamento() {
     const precoUnitario = custoTotal * (1 + margemNum)
     const qtd = parseFloat(quantidade.replace(',', '.')) || 1
     return { custoMaterial, custoEnergia, custoTotal, precoUnitario, precoFinal: precoUnitario * qtd }
-  }, [peso, materialIdx, horas, custoEnergiaHora, margem, quantidade])
+  }, [peso, materialIdx, horas, custoEnergiaHora, margem, quantidade, materiais])
 
   function enviarWhatsApp() {
     const texto = `Olá! Segue o orçamento${nome ? ` da peça "${nome}"` : ''}: ${formatMoney(resultado.precoFinal)}.`
@@ -35,7 +50,7 @@ export function Orcamento() {
   return (
     <div>
       <h1 className="text-2xl font-semibold m-0">Orçamento</h1>
-      <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Calcula custo e preço sugerido pela peça</p>
+      <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Calcula custo e preço sugerido pela peça {usandoMock && '(materiais de exemplo)'}</p>
 
       <div className="flex gap-4 flex-wrap items-start">
         <Card className="flex-1 min-w-[320px]">

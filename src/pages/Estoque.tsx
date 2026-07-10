@@ -4,7 +4,12 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Money } from '@/components/ui/Money'
-import { materiais, produtosProntos } from '@/data/mockData'
+import { useApi } from '@/lib/useApi'
+import { materiais as materiaisMock, produtosProntos as produtosMock } from '@/data/mockData'
+
+interface MaterialApiRow { id: string; nome: string; preco_kg: string; estoque_g: string; capacidade_g: string }
+interface ProdutoApiRow { id: string; nome: string; material: string | null; quantidade: number; custo_unitario: string; preco_venda: string }
+interface PerdaApiRow { id: string; peso_perdido_g: string; motivo: string | null; custo: string | null; data: string; material_nome: string | null }
 
 function statusMaterial(pct: number): { color: 'red' | 'amber' | 'green'; label: string; bar: string } {
   if (pct <= 20) return { color: 'red', label: 'Baixo', bar: 'var(--destructive)' }
@@ -14,6 +19,26 @@ function statusMaterial(pct: number): { color: 'red' | 'amber' | 'green'; label:
 
 export function Estoque() {
   const [aba, setAba] = useState<'materia' | 'produtos'>('materia')
+
+  const { data: matApi, loading: matLoading, error: matError } = useApi<MaterialApiRow[]>('/api/materiais', [])
+  const { data: prodApi, loading: prodLoading, error: prodError } = useApi<ProdutoApiRow[]>('/api/produtos-prontos', [])
+  const { data: perdasApi } = useApi<PerdaApiRow[]>('/api/perdas', [])
+
+  const materiais = (!matLoading && (matError || matApi.length === 0))
+    ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, estoqueG: m.estoqueG, capacidadeG: m.capacidadeG }))
+    : matApi.map(m => ({ id: m.id, nome: m.nome, estoqueG: Number(m.estoque_g), capacidadeG: Number(m.capacidade_g) }))
+
+  const produtos = (!prodLoading && (prodError || prodApi.length === 0))
+    ? produtosMock
+    : prodApi.map(p => ({ id: p.id, nome: p.nome, material: p.material ?? '', quantidade: p.quantidade, custoUnitario: Number(p.custo_unitario), precoVenda: Number(p.preco_venda) }))
+
+  const perdas = perdasApi.length > 0
+    ? perdasApi.map(p => ({ id: p.id, data: p.data, material: p.material_nome ?? '—', peso: Number(p.peso_perdido_g), motivo: p.motivo ?? '—', custo: Number(p.custo ?? 0) }))
+    : [
+        { id: '1', data: '2026-07-06', material: 'PETG Preto', peso: 65, motivo: 'Descolou da mesa', custo: 6.17 },
+        { id: '2', data: '2026-07-02', material: 'PLA Vermelho', peso: 30, motivo: 'Warping', custo: 2.4 }
+      ]
+
   const baixos = materiais.filter(m => (m.estoqueG / m.capacidadeG) * 100 <= 20)
 
   return (
@@ -78,20 +103,15 @@ export function Estoque() {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="px-2.5 py-2.5 border-b border-[var(--border)]">06/07/2026</td>
-                  <td className="px-2.5 py-2.5 border-b border-[var(--border)]">PETG Preto</td>
-                  <td className="px-2.5 py-2.5 border-b border-[var(--border)]">65g</td>
-                  <td className="px-2.5 py-2.5 border-b border-[var(--border)]">Descolou da mesa</td>
-                  <td className="px-2.5 py-2.5 border-b border-[var(--border)]"><Money value={6.17} /></td>
-                </tr>
-                <tr>
-                  <td className="px-2.5 py-2.5">02/07/2026</td>
-                  <td className="px-2.5 py-2.5">PLA Vermelho</td>
-                  <td className="px-2.5 py-2.5">30g</td>
-                  <td className="px-2.5 py-2.5">Warping</td>
-                  <td className="px-2.5 py-2.5"><Money value={2.4} /></td>
-                </tr>
+                {perdas.map((p, i) => (
+                  <tr key={p.id}>
+                    <td className={`px-2.5 py-2.5 ${i < perdas.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.data.split('-').reverse().join('/')}</td>
+                    <td className={`px-2.5 py-2.5 ${i < perdas.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.material}</td>
+                    <td className={`px-2.5 py-2.5 ${i < perdas.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.peso}g</td>
+                    <td className={`px-2.5 py-2.5 ${i < perdas.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.motivo}</td>
+                    <td className={`px-2.5 py-2.5 ${i < perdas.length - 1 ? 'border-b border-[var(--border)]' : ''}`}><Money value={p.custo} /></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </Card>
@@ -104,15 +124,15 @@ export function Estoque() {
           <div className="flex gap-4 flex-wrap">
             <Card className="flex-1 min-w-[190px]">
               <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><Boxes size={14} />Peças em estoque</div>
-              <div className="text-2xl font-extrabold">{produtosProntos.reduce((s, p) => s + p.quantidade, 0)}</div>
+              <div className="text-2xl font-extrabold">{produtos.reduce((s, p) => s + p.quantidade, 0)}</div>
             </Card>
             <Card className="flex-1 min-w-[190px]">
               <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><Banknote size={14} />Valor parado (custo)</div>
-              <div className="text-2xl font-extrabold"><Money value={produtosProntos.reduce((s, p) => s + p.custoUnitario * p.quantidade, 0)} /></div>
+              <div className="text-2xl font-extrabold"><Money value={produtos.reduce((s, p) => s + p.custoUnitario * p.quantidade, 0)} /></div>
             </Card>
             <Card className="flex-1 min-w-[190px]">
               <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><TrendingUp size={14} />Valor de venda potencial</div>
-              <div className="text-2xl font-extrabold"><Money value={produtosProntos.reduce((s, p) => s + p.precoVenda * p.quantidade, 0)} /></div>
+              <div className="text-2xl font-extrabold"><Money value={produtos.reduce((s, p) => s + p.precoVenda * p.quantidade, 0)} /></div>
             </Card>
           </div>
 
@@ -130,14 +150,14 @@ export function Estoque() {
                 </tr>
               </thead>
               <tbody>
-                {produtosProntos.map((p, i) => (
+                {produtos.map((p, i) => (
                   <tr key={p.id}>
-                    <td className={`px-2.5 py-2.5 ${i < produtosProntos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.nome}</td>
-                    <td className={`px-2.5 py-2.5 ${i < produtosProntos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.material}</td>
-                    <td className={`px-2.5 py-2.5 ${i < produtosProntos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.quantidade}</td>
-                    <td className={`px-2.5 py-2.5 ${i < produtosProntos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}><Money value={p.custoUnitario} /></td>
-                    <td className={`px-2.5 py-2.5 ${i < produtosProntos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}><Money value={p.precoVenda} /></td>
-                    <td className={`px-2.5 py-2.5 ${i < produtosProntos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>
+                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.nome}</td>
+                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.material}</td>
+                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>{p.quantidade}</td>
+                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}><Money value={p.custoUnitario} /></td>
+                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}><Money value={p.precoVenda} /></td>
+                    <td className={`px-2.5 py-2.5 ${i < produtos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>
                       <Badge color={p.quantidade <= 1 ? 'amber' : 'green'}>{p.quantidade <= 1 ? 'Última unidade' : 'Disponível'}</Badge>
                     </td>
                   </tr>

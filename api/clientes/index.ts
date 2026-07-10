@@ -3,7 +3,15 @@ import { sql } from '../_db'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
-    const clientes = await sql`SELECT * FROM clientes ORDER BY nome`
+    const clientes = await sql`
+      SELECT c.id, c.nome, c.contato,
+        COUNT(p.id)::int as pedidos,
+        COALESCE(SUM(p.valor), 0) as total_gasto
+      FROM clientes c
+      LEFT JOIN pedidos p ON p.cliente_id = c.id
+      GROUP BY c.id
+      ORDER BY c.nome
+    `
     return res.status(200).json(clientes)
   }
 

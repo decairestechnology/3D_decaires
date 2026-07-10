@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Sparkles, Eye, EyeOff, Sun, Moon, LogOut } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { useValuesVisibility } from '@/context/ValuesVisibilityContext'
+import { useAuth } from '@/context/AuthContext'
 
 function scoutReplyFor(question: string) {
   const q = question.toLowerCase()
@@ -15,8 +17,17 @@ function scoutReplyFor(question: string) {
 export function Topbar() {
   const { theme, toggleTheme } = useTheme()
   const { hideValues, toggleHideValues } = useValuesVisibility()
+  const { user, signOut } = useAuth()
+  const navigate = useNavigate()
   const [question, setQuestion] = useState('')
   const [reply, setReply] = useState<string | null>(null)
+
+  async function handleLogout() {
+    await signOut()
+    navigate('/login', { replace: true })
+  }
+
+  const inicial = user?.email?.[0]?.toUpperCase() ?? 'D'
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter' && question.trim()) {
@@ -54,13 +65,17 @@ export function Topbar() {
           {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
         </button>
         <button
+          onClick={handleLogout}
           title="Sair"
           className="w-[34px] h-[34px] rounded-full bg-[var(--muted)] text-[var(--muted-foreground)] flex items-center justify-center flex-shrink-0"
         >
           <LogOut size={16} />
         </button>
-        <div className="w-[34px] h-[34px] rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 text-white flex items-center justify-center text-[13px] font-extrabold flex-shrink-0 cursor-pointer">
-          D
+        <div
+          title={user?.email ?? ''}
+          className="w-[34px] h-[34px] rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 text-white flex items-center justify-center text-[13px] font-extrabold flex-shrink-0 cursor-pointer"
+        >
+          {inicial}
         </div>
       </div>
 

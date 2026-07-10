@@ -3,7 +3,8 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Money } from '@/components/ui/Money'
-import { pedidos } from '@/data/mockData'
+import { useApi } from '@/lib/useApi'
+import { pedidos as pedidosMock } from '@/data/mockData'
 
 const statusBadge: Record<string, { color: 'cyan' | 'amber' | 'green' | 'gray'; label: string }> = {
   producao: { color: 'cyan', label: 'Em produção' },
@@ -12,7 +13,20 @@ const statusBadge: Record<string, { color: 'cyan' | 'amber' | 'green' | 'gray'; 
   entregue: { color: 'gray', label: 'Entregue' }
 }
 
+interface PedidoApiRow {
+  id: string
+  cliente_nome: string
+  peca: string
+  valor: string
+  status: string
+}
+
 export function Dashboard() {
+  const { data, loading, error } = useApi<PedidoApiRow[]>('/api/pedidos', [])
+  const usandoMock = !loading && (error || data.length === 0)
+  const pedidos = usandoMock
+    ? pedidosMock
+    : data.slice(0, 4).map(p => ({ id: p.id, clienteNome: p.cliente_nome, peca: p.peca, valor: Number(p.valor), status: p.status }))
   return (
     <div>
       <div className="flex justify-between items-center mb-1.5">
@@ -47,6 +61,7 @@ export function Dashboard() {
       </div>
 
       <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Prazos de entrega</h2>
+      <p className="text-xs text-[var(--muted-foreground)] -mt-2 mb-3">Ainda de exemplo — liga na Agenda quando os pedidos reais tiverem prazo.</p>
       <Card className="p-0">
         <table className="w-full border-collapse text-[13.5px]">
           <thead>
@@ -81,6 +96,7 @@ export function Dashboard() {
       </Card>
 
       <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Fila de impressão</h2>
+      <p className="text-xs text-[var(--muted-foreground)] -mt-2 mb-3">Ainda manual — sem integração com a impressora.</p>
       <Card className="p-0">
         <div className="flex items-center gap-3.5 px-4 py-3.5 border-b border-[var(--border)]">
           <div className="w-10 h-10 rounded-lg bg-[var(--accent)] text-[var(--primary)] flex items-center justify-center flex-shrink-0"><Printer size={18} /></div>
@@ -102,7 +118,7 @@ export function Dashboard() {
         </div>
       </Card>
 
-      <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Pedidos recentes</h2>
+      <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Pedidos recentes {usandoMock && <span className="text-xs font-normal text-[var(--muted-foreground)]">(dados de exemplo)</span>}</h2>
       <Card className="p-0">
         <table className="w-full border-collapse text-[13.5px]">
           <thead>

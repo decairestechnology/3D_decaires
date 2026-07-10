@@ -3,26 +3,42 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Money } from '@/components/ui/Money'
-import { equipamentos } from '@/data/mockData'
+import { useApi } from '@/lib/useApi'
+import { equipamentos as equipamentosMock } from '@/data/mockData'
+
+interface EquipamentoApiRow {
+  id: string
+  nome: string
+  tipo: 'impressora' | 'ferramenta'
+  valor: string
+  aquisicao: string
+  status: string
+}
+
+function badgeColor(status: string): 'green' | 'amber' | 'gray' {
+  if (status.toLowerCase().includes('funcionando') || status === 'OK') return 'green'
+  if (status.toLowerCase().includes('pendente')) return 'amber'
+  return 'gray'
+}
 
 export function Maquinario() {
+  const { data, loading, error } = useApi<EquipamentoApiRow[]>('/api/equipamentos', [])
+  const usandoMock = !loading && (error || data.length === 0)
+  const equipamentos = usandoMock
+    ? equipamentosMock
+    : data.map(e => ({ id: e.id, nome: e.nome, tipo: e.tipo, valor: Number(e.valor), aquisicao: e.aquisicao, status: e.status }))
+
   const impressoras = equipamentos.filter(e => e.tipo === 'impressora')
   const ferramentas = equipamentos.filter(e => e.tipo === 'ferramenta')
   const totalInvestido = equipamentos.reduce((s, e) => s + e.valor, 0)
   const pendentes = equipamentos.filter(e => e.status.toLowerCase().includes('pendente') || e.status.toLowerCase().includes('desgast'))
-
-  function badgeColor(status: string): 'green' | 'amber' | 'gray' {
-    if (status.toLowerCase().includes('funcionando') || status === 'OK') return 'green'
-    if (status.toLowerCase().includes('pendente')) return 'amber'
-    return 'gray'
-  }
 
   return (
     <div>
       <div className="flex justify-between items-center mb-5">
         <div>
           <h1 className="text-2xl font-semibold m-0">Maquinário e ferramentas</h1>
-          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Seus equipamentos, valor investido e manutenção</p>
+          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Seus equipamentos, valor investido e manutenção {usandoMock && '(dados de exemplo)'}</p>
         </div>
         <Button variant="gradient"><Plus size={15} />Novo equipamento</Button>
       </div>

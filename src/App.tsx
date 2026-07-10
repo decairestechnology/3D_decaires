@@ -1,5 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { Login } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
 import { Agenda } from '@/pages/Agenda'
 import { Pedidos } from '@/pages/Pedidos'
@@ -14,7 +16,14 @@ import { Configuracoes } from '@/pages/Configuracoes'
 export default function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
+      <Route path="/login" element={<Login />} />
+      <Route
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
         <Route path="/" element={<Dashboard />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/pedidos" element={<Pedidos />} />

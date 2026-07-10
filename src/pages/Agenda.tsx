@@ -1,7 +1,8 @@
 import { Package, Wrench } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { eventosAgenda } from '@/data/mockData'
+import { useApi } from '@/lib/useApi'
+import { eventosAgenda as eventosMock } from '@/data/mockData'
 
 // Julho de 2026 — domingo como primeiro dia da semana
 const semanas = [
@@ -14,15 +15,27 @@ const semanas = [
 
 const HOJE = 10
 
-function eventosNoDia(dia: number) {
-  return eventosAgenda.filter(e => Number(e.data.split('-')[2]) === dia)
+interface EventoApiRow {
+  id: string
+  data: string
+  titulo: string
+  descricao: string | null
+  tipo: 'entrega' | 'manutencao'
 }
 
 export function Agenda() {
+  const { data, loading, error } = useApi<EventoApiRow[]>('/api/agenda', [])
+  const usandoMock = !loading && (error || data.length === 0)
+  const eventos = usandoMock ? eventosMock : data.map(e => ({ id: e.id, data: e.data, titulo: e.titulo, descricao: e.descricao ?? '', tipo: e.tipo }))
+
+  function eventosNoDia(dia: number) {
+    return eventos.filter(e => Number(e.data.split('-')[2]) === dia)
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-semibold m-0">Agenda</h1>
-      <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Prazos de entrega, manutenções e compromissos</p>
+      <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Prazos de entrega, manutenções e compromissos {usandoMock && '(dados de exemplo)'}</p>
 
       <Card>
         <div className="flex items-center justify-between mb-3.5">
@@ -34,7 +47,7 @@ export function Agenda() {
           ))}
           {semanas.flat().map((dia, i) => {
             if (dia === 0) return <div key={i} className="min-h-[78px]" />
-            const eventos = eventosNoDia(dia)
+            const evs = eventosNoDia(dia)
             const isHoje = dia === HOJE
             return (
               <div
@@ -44,7 +57,7 @@ export function Agenda() {
               >
                 {dia}
                 <div className="flex flex-col gap-1 mt-1.5">
-                  {eventos.map(e => (
+                  {evs.map(e => (
                     <span
                       key={e.id}
                       className={`text-[10px] font-bold rounded px-1.5 py-0.5 truncate
@@ -62,10 +75,10 @@ export function Agenda() {
 
       <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Próximos compromissos</h2>
       <Card className="p-0">
-        {eventosAgenda.map((e, i) => (
+        {eventos.map((e, i) => (
           <div
             key={e.id}
-            className={`flex items-center gap-3 px-4 py-3 ${i < eventosAgenda.length - 1 ? 'border-b border-[var(--border)]' : ''}`}
+            className={`flex items-center gap-3 px-4 py-3 ${i < eventos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}
           >
             <div className="text-xs font-bold text-[var(--muted-foreground)] w-11 flex-shrink-0">
               {e.data.split('-').slice(1).reverse().join('/')}
