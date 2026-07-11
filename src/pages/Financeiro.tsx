@@ -1,9 +1,10 @@
-import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { useMemo, useState, FormEvent } from 'react'
+import { Plus, Pencil, Trash2, BarChart3, LineChart as LineChartIcon } from 'lucide-react'
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Money } from '@/components/ui/Money'
+import { Money, formatMoney } from '@/components/ui/Money'
 import { Modal } from '@/components/ui/Modal'
 import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input, Select } from '@/components/ui/Input'
@@ -11,6 +12,8 @@ import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { lancamentos as lancamentosMock } from '@/data/mockData'
 import { formatarDataBR } from '@/lib/date'
+
+const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 interface LancamentoApiRow {
   id: string
@@ -45,6 +48,26 @@ export function Financeiro() {
 
   const receita = lancamentos.filter(l => l.tipo === 'receita').reduce((s, l) => s + l.valor, 0)
   const despesa = lancamentos.filter(l => l.tipo === 'despesa').reduce((s, l) => s + l.valor, 0)
+
+  const [tipoGrafico, setTipoGrafico] = useState<'barra' | 'linha'>('barra')
+
+  const fluxoMensal = useMemo(() => {
+    const hoje = new Date()
+    const meses: { chave: string; mes: string; Receita: number; Despesa: number; Saldo: number }[] = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+      meses.push({ chave: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, mes: mesesNomes[d.getMonth()], Receita: 0, Despesa: 0, Saldo: 0 })
+    }
+    lancamentos.forEach(l => {
+      const chave = l.data.slice(0, 7)
+      const m = meses.find(x => x.chave === chave)
+      if (!m) return
+      if (l.tipo === 'receita') m.Receita += l.valor
+      else m.Despesa += l.valor
+    })
+    meses.forEach(m => { m.Saldo = m.Receita - m.Despesa })
+    return meses
+  }, [lancamentos])
 
   function abrirNovo() {
     setForm(formVazio)
@@ -116,6 +139,50 @@ export function Financeiro() {
           <div className="text-xs text-[var(--muted-foreground)] mt-1">margem de {receita > 0 ? Math.round(((receita - despesa) / receita) * 100) : 0}%</div>
         </Card>
       </div>
+
+      <div className="flex items-center justify-between mt-7 mb-3">
+        <h2 className="text-[1.05rem] font-semibold m-0">Fluxo de caixa mensal</h2>
+        <div className="flex items-center gap-1 bg-[var(--muted)] rounded-lg p-1">
+          <button
+            onClick={() => setTipoGrafico('barra')}
+            className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 text-xs font-semibold ${tipoGrafico === 'barra' ? 'bg-[var(--primary)] text-[var(--primary-foreground)]' : 'text-[var(--muted-foreground)]'}`}
+          >
+            <BarChart3 size={13} />Barra
+          </button>
+          <button
+            onClick={() => setTipoGrafico('linha')}
+            className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 text-xs font-semibold ${tipoGrafico === 'linha' ? 'bg-[var(--primary)] text-[var(--primary-foreground)]' : 'text-[var(--muted-foreground)]'}`}
+          >
+            <LineChartIcon size={13} />Linha
+          </button>
+        </div>
+      </div>
+      <Card>
+        <div style={{ width: '100%', height: 260 }}>
+          <ResponsiveContainer>
+            {tipoGrafico === 'barra' ? (
+              <BarChart data={fluxoMensal} margin={{ left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="mes" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} width={70} tickFormatter={v => formatMoney(v)} />
+                <Tooltip formatter={(v: number) => formatMoney(v)} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="Receita" fill="#10B981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Despesa" fill="#EF4444" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            ) : (
+              <LineChart data={fluxoMensal} margin={{ left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="mes" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} width={70} tickFormatter={v => formatMoney(v)} />
+                <Tooltip formatter={(v: number) => formatMoney(v)} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
+                <Line type="monotone" dataKey="Receita" stroke="#10B981" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="Despesa" stroke="#EF4444" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="Saldo" stroke="#7C3AED" strokeWidth={2.5} dot={{ r: 3 }} />
+              </LineChart>
+            )}
+          </ResponsiveContainer>
+        </div>
+      </Card>
 
       <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Lançamentos recentes</h2>
       <Card className="p-0">

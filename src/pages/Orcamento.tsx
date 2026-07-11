@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Send, Plus, Trash2, Save, PackageCheck } from 'lucide-react'
+import { Send, Plus, Trash2, Save, PackageCheck, Pencil } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -14,10 +14,13 @@ import { carregarPreferencias } from '@/lib/settings'
 
 interface MaterialApiRow { id: string; nome: string; preco_kg: string }
 interface ClienteApiRow { id: string; nome: string }
-interface ItemSalvo { nome: string; quantidade: number; valor: number }
+interface ItemSalvo {
+  nome: string; peso: string; materialId: string; horas: string; quantidade: number
+  custoUnitario: number; valor: number
+}
 interface OrcamentoSalvoApiRow {
   id: string; cliente_id: string | null; cliente_nome: string | null
-  itens: ItemSalvo[]; valor_total: string; convertido: boolean; criado_em: string
+  itens: ItemSalvo[]; margem: string; custo_energia_hora: string; valor_total: string; convertido: boolean; criado_em: string
 }
 
 interface ItemOrcamento {
@@ -55,6 +58,7 @@ export function Orcamento() {
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [editandoClienteDe, setEditandoClienteDe] = useState<string | null>(null)
   const [clienteSelecionadoEdicao, setClienteSelecionadoEdicao] = useState('')
+  const [editandoOrcamentoId, setEditandoOrcamentoId] = useState<string | null>(null)
 
   const clienteNome = clientesApi.find(c => c.id === clienteId)?.nome ?? ''
 
@@ -141,24 +145,53 @@ export function Orcamento() {
     try {
       const itensSalvos: ItemSalvo[] = calculo.linhas.map(l => ({
         nome: l.item.nome || 'Peça personalizada',
+        peso: l.item.peso,
+        materialId: materiais[l.item.materialIdx]?.id ?? '',
+        horas: l.item.horas,
         quantidade: l.qtd,
+        custoUnitario: l.custoMaterial + l.custoEnergia,
         valor: l.precoLinha
       }))
-      await api.post('/api/orcamentos', {
+      const payload = {
         cliente_id: clienteId || null,
         itens: itensSalvos,
         margem: Number(margem.replace(',', '.')) || 0,
         custo_energia_hora: Number(custoEnergiaHora.replace(',', '.')) || 0,
         valor_total: calculo.total
-      })
+      }
+      if (editandoOrcamentoId) await api.patch(`/api/orcamentos?id=${editandoOrcamentoId}`, payload)
+      else await api.post('/api/orcamentos', payload)
       reloadSalvos()
-      alert('Orçamento salvo! Ele aparece na lista abaixo — dá pra transformar em pedido quando o cliente aprovar.')
+      setEditandoOrcamentoId(null)
+      setClienteId('')
+      setItens([novoItem()])
+      alert(editandoOrcamentoId ? 'Orçamento atualizado!' : 'Orçamento salvo! Ele aparece na lista abaixo — dá pra transformar em pedido quando o cliente aprovar.')
     } catch (err) {
       console.error('[Salvar orçamento] erro:', err)
       alert('Não deu pra salvar o orçamento — confere a conexão com o banco.')
     } finally {
       setSalvando(false)
     }
+  }
+
+  function editarOrcamentoSalvo(o: OrcamentoSalvoApiRow) {
+    setEditandoOrcamentoId(o.id)
+    setClienteId(o.cliente_id ?? '')
+    setMargem(o.margem)
+    setCustoEnergiaHora(o.custo_energia_hora)
+    setItens(
+      o.itens.length > 0
+        ? o.itens.map(it => ({
+            id: crypto.randomUUID(),
+            nome: it.nome,
+            peso: it.peso ?? '80',
+            materialIdx: Math.max(materiais.findIndex(m => m.id === it.materialId), 0),
+            horas: it.horas ?? '6',
+            quantidade: String(it.quantidade)
+          }))
+        : [novoItem()]
+    )
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   async function virarPedido(orc: OrcamentoSalvoApiRow) {
@@ -256,6 +289,7 @@ export function Orcamento() {
                 <div className="flex justify-between items-center mb-2">
                   <b className="text-sm">Peça {idx + 1}</b>
                   <div className="flex items-center gap-3">
+                    <span className="text-xs text-[var(--muted-foreground)]">un.: {formatMoney(linha?.precoUnitario ?? 0)}</span>
                     <span className="text-sm font-bold text-[var(--secondary)]">{formatMoney(linha?.precoLinha ?? 0)}</span>
                     {itens.length > 1 && (
                       <button onClick={() => removerItem(it.id)} className="text-[var(--muted-foreground)] hover:text-red-600">
@@ -308,8 +342,13 @@ export function Orcamento() {
             </div>
           </div>
           <Button variant="primary" className="w-full mt-3.5" onClick={salvarOrcamento} disabled={salvando}>
-            <Save size={15} />{salvando ? 'Salvando...' : 'Salvar orçamento'}
+            <Save size={15} />{salvando ? 'Salvando...' : editandoOrcamentoId ? 'Atualizar orçamento' : 'Salvar orçamento'}
           </Button>
+          {editandoOrcamentoId && (
+            <Button variant="ghost" className="w-full mt-2" onClick={() => { setEditandoOrcamentoId(null); setClienteId(''); setItens([novoItem()]) }}>
+              Cancelar edição
+            </Button>
+          )}
           <Button variant="gradient" className="w-full mt-2" onClick={gerarPdf}><Send size={15} />Gerar orçamento PDF</Button>
           <Button variant="whatsapp" className="w-full mt-2" onClick={enviarWhatsApp}>Enviar por WhatsApp</Button>
         </Card>
@@ -343,7 +382,7 @@ export function Orcamento() {
                           )}
                         </div>
                         <div className="text-xs text-[var(--muted-foreground)]">
-                          {o.itens.map(it => it.nome).join(', ')} · {formatarDataBR(o.criado_em)}
+                          {o.itens.map(it => `${it.nome} (un.: ${formatMoney(it.custoUnitario ?? 0)})`).join(', ')} · {formatarDataBR(o.criado_em)}
                         </div>
                       </>
                     )}
@@ -365,6 +404,9 @@ export function Orcamento() {
                           <Button variant="ghost" onClick={() => virarPedido(o)} disabled={convertendoId === o.id}>
                             <PackageCheck size={14} />{convertendoId === o.id ? 'Convertendo...' : 'Virar pedido'}
                           </Button>
+                          <button onClick={() => editarOrcamentoSalvo(o)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]">
+                            <Pencil size={13} />
+                          </button>
                           <button onClick={() => setConfirmandoId(o.id)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600">
                             <Trash2 size={13} />
                           </button>

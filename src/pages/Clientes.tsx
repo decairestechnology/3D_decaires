@@ -1,14 +1,27 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Mail, MapPin, FileText, Phone } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input } from '@/components/ui/Input'
-import { Money } from '@/components/ui/Money'
+import { Money, formatMoney } from '@/components/ui/Money'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
+import { formatarDataBR } from '@/lib/date'
 import { clientes as clientesMock } from '@/data/mockData'
+
+interface PedidoApiRow {
+  id: string; numero?: number; cliente_id: string; peca: string; valor: string; prazo: string | null; status: string
+}
+
+const statusBadge: Record<string, { color: 'cyan' | 'amber' | 'green' | 'gray'; label: string }> = {
+  producao: { color: 'cyan', label: 'Em produção' },
+  orcamento: { color: 'amber', label: 'Orçamento' },
+  pronto: { color: 'green', label: 'Pronto' },
+  entregue: { color: 'gray', label: 'Entregue' }
+}
 
 interface ClienteApiRow {
   id: string
@@ -29,20 +42,27 @@ const formVazio = { id: '', nome: '', contato: '', email: '', endereco: '', obse
 
 export function Clientes() {
   const { data, loading, error, reload } = useApi<ClienteApiRow[]>('/api/clientes', [])
+  const { data: pedidosApi } = useApi<PedidoApiRow[]>('/api/pedidos', [])
   const [modalOpen, setModalOpen] = useState(false)
+  const [fichaAberta, setFichaAberta] = useState<ReturnType<typeof mapCliente> | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
 
   const usandoMock = !loading && !!error
   const vazio = !loading && !error && data.length === 0
+
+  function mapCliente(c: ClienteApiRow) {
+    return {
+      id: c.id, nome: c.nome, contato: c.contato ?? '—', email: c.email ?? '',
+      endereco: c.endereco ?? '', observacoes: c.observacoes ?? '',
+      pedidos: c.pedidos, totalGasto: Number(c.total_gasto)
+    }
+  }
+
   const clientes = usandoMock
     ? clientesMock.map(c => ({ ...c, email: '', endereco: '', observacoes: '' }))
-    : data.map(c => ({
-        id: c.id, nome: c.nome, contato: c.contato ?? '—', email: c.email ?? '',
-        endereco: c.endereco ?? '', observacoes: c.observacoes ?? '',
-        pedidos: c.pedidos, totalGasto: Number(c.total_gasto)
-      }))
+    : data.map(mapCliente)
 
   function abrirNovo() { setForm(formVazio); setModalOpen(true) }
   function abrirEdicao(c: typeof clientes[number]) {
@@ -118,7 +138,7 @@ export function Clientes() {
             {clientes.map((c, i) => {
               const last = i === clientes.length - 1
               return (
-                <tr key={c.id}>
+                <tr key={c.id} onClick={() => setFichaAberta(c)} className="cursor-pointer hover:bg-[var(--muted)]">
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
                     <div className="w-[30px] h-[30px] rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 text-white flex items-center justify-center text-xs font-extrabold">
                       {iniciais(c.nome)}
@@ -131,7 +151,7 @@ export function Clientes() {
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{c.contato}</td>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{c.pedidos}</td>
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}><Money value={c.totalGasto} /></td>
-                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
+                  <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`} onClick={e => e.stopPropagation()}>
                     {confirmandoId === c.id ? (
                       <InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluir(c.id)} />
                     ) : !usandoMock && (
@@ -152,6 +172,56 @@ export function Clientes() {
         </table>
         )}
       </Card>
+
+      <Modal
+        open={!!fichaAberta}
+        onClose={() => setFichaAberta(null)}
+        title={fichaAberta?.nome ?? ''}
+        footer={<Button variant="ghost" onClick={() => setFichaAberta(null)}>Fechar</Button>}
+      >
+        {fichaAberta && (
+          <div>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-[var(--muted)] rounded-lg p-3">
+                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Pedidos</div>
+                <div className="text-lg font-extrabold">{fichaAberta.pedidos}</div>
+              </div>
+              <div className="bg-[var(--muted)] rounded-lg p-3">
+                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Total gasto</div>
+                <div className="text-lg font-extrabold">{formatMoney(fichaAberta.totalGasto)}</div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 text-sm mb-4">
+              {fichaAberta.contato !== '—' && <div className="flex items-center gap-2"><Phone size={13} className="text-[var(--muted-foreground)]" />{fichaAberta.contato}</div>}
+              {fichaAberta.email && <div className="flex items-center gap-2"><Mail size={13} className="text-[var(--muted-foreground)]" />{fichaAberta.email}</div>}
+              {fichaAberta.endereco && <div className="flex items-center gap-2"><MapPin size={13} className="text-[var(--muted-foreground)]" />{fichaAberta.endereco}</div>}
+              {fichaAberta.observacoes && <div className="flex items-start gap-2"><FileText size={13} className="text-[var(--muted-foreground)] mt-0.5" />{fichaAberta.observacoes}</div>}
+            </div>
+
+            <div className="text-xs font-bold text-[var(--muted-foreground)] mb-2">HISTÓRICO DE PEDIDOS</div>
+            {pedidosApi.filter(p => p.cliente_id === fichaAberta.id).length === 0 ? (
+              <div className="text-sm text-[var(--muted-foreground)] py-3 text-center bg-[var(--muted)] rounded-lg">Nenhum pedido ainda.</div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-[260px] overflow-y-auto">
+                {pedidosApi.filter(p => p.cliente_id === fichaAberta.id).map(p => (
+                  <div key={p.id} className="flex items-center justify-between bg-[var(--muted)] rounded-lg px-3 py-2 text-[13px]">
+                    <div>
+                      {p.numero && <span className="text-[10px] font-bold text-[var(--muted-foreground)] mr-1">#{p.numero}</span>}
+                      {p.peca}
+                      <div className="text-xs text-[var(--muted-foreground)]">{p.prazo ? formatarDataBR(p.prazo) : 'Sem prazo'}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{formatMoney(Number(p.valor))}</span>
+                      <Badge color={statusBadge[p.status]?.color ?? 'gray'}>{statusBadge[p.status]?.label ?? p.status}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={modalOpen}

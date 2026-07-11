@@ -39,11 +39,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PATCH' && id) {
-    const { convertido, cliente_id } = req.body
+    const { convertido, cliente_id, itens, margem, custo_energia_hora, valor_total } = req.body
     const [atualizado] = await sql`
       UPDATE orcamentos_salvos SET
         convertido = COALESCE(${convertido}, convertido),
-        cliente_id = COALESCE(${cliente_id}, cliente_id)
+        cliente_id = COALESCE(${cliente_id}, cliente_id),
+        itens = COALESCE(${itens ? JSON.stringify(itens) : null}, itens),
+        margem = COALESCE(${margem}, margem),
+        custo_energia_hora = COALESCE(${custo_energia_hora}, custo_energia_hora),
+        valor_total = COALESCE(${valor_total}, valor_total)
       WHERE id = ${id} RETURNING *
     `
     if (!atualizado) return res.status(404).json({ error: 'Orçamento não encontrado' })
