@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, EyeOff, Eye as EyeIcon, Tag, RefreshCw } from 'lucide-react'
+import { Plus, Pencil, Trash2, EyeOff, Eye as EyeIcon, Tag, RefreshCw, ImageOff } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -14,11 +14,11 @@ import { carregarPreferencias } from '@/lib/settings'
 interface ProdutoApiRow {
   id: string; codigo: string; nome: string; material_id: string | null; material_nome: string | null
   peso_padrao_g: string | null; tempo_impressao_h: string | null; preco_padrao: string | null
-  descricao: string | null; ativo: boolean
+  descricao: string | null; ativo: boolean; imagem_url: string | null
 }
 interface MaterialApiRow { id: string; nome: string; preco_kg: string }
 
-const formVazio = { id: '', codigo: '', nome: '', material_id: '', peso_padrao_g: '', tempo_impressao_h: '', preco_padrao: '', descricao: '' }
+const formVazio = { id: '', codigo: '', nome: '', material_id: '', peso_padrao_g: '', tempo_impressao_h: '', preco_padrao: '', descricao: '', imagem_url: '' }
 
 export function Catalogo() {
   const { data, loading, error, reload } = useApi<ProdutoApiRow[]>('/api/catalogo', [])
@@ -61,7 +61,8 @@ export function Catalogo() {
     setForm({
       id: p.id, codigo: p.codigo, nome: p.nome, material_id: p.material_id ?? '',
       peso_padrao_g: p.peso_padrao_g ?? '', tempo_impressao_h: p.tempo_impressao_h ?? '',
-      preco_padrao: p.preco_padrao ? String(p.preco_padrao).replace('.', ',') : '', descricao: p.descricao ?? ''
+      preco_padrao: p.preco_padrao ? String(p.preco_padrao).replace('.', ',') : '', descricao: p.descricao ?? '',
+      imagem_url: p.imagem_url ?? ''
     })
     setModalOpen(true)
   }
@@ -76,7 +77,7 @@ export function Catalogo() {
         peso_padrao_g: form.peso_padrao_g ? Number(form.peso_padrao_g) : null,
         tempo_impressao_h: form.tempo_impressao_h ? Number(form.tempo_impressao_h.replace(',', '.')) : null,
         preco_padrao: form.preco_padrao ? Number(form.preco_padrao.replace(',', '.')) : null,
-        descricao: form.descricao || null
+        descricao: form.descricao || null, imagem_url: form.imagem_url || null
       }
       if (form.id) await api.patch(`/api/catalogo?id=${form.id}`, payload)
       else await api.post('/api/catalogo', payload)
@@ -118,6 +119,7 @@ export function Catalogo() {
           <table className="w-full border-collapse text-[13.5px]">
             <thead>
               <tr>
+                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]"></th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Código</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Nome</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Material</th>
@@ -132,6 +134,15 @@ export function Catalogo() {
                 const last = i === produtos.length - 1
                 return (
                   <tr key={p.id}>
+                    <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
+                      <div className="w-9 h-9 rounded-lg bg-[var(--muted)] overflow-hidden flex items-center justify-center flex-shrink-0">
+                        {p.imagem_url ? (
+                          <img src={p.imagem_url} alt={p.nome} className="w-full h-full object-cover" onError={ev => { (ev.target as HTMLImageElement).style.display = 'none' }} />
+                        ) : (
+                          <ImageOff size={14} className="text-[var(--muted-foreground)]" />
+                        )}
+                      </div>
+                    </td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
                       <span className="inline-flex items-center gap-1 font-mono text-xs font-bold bg-[var(--muted)] px-2 py-1 rounded"><Tag size={11} />{p.codigo}</span>
                     </td>
@@ -235,6 +246,11 @@ export function Catalogo() {
         </div>
         {form.material_id && (
           <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">Calculado com sua margem e custo de energia padrão (Configurações) — pode ajustar na mão.</div>
+        )}
+        <Label>Link da imagem (opcional)</Label>
+        <Input placeholder="https://..." value={form.imagem_url} onChange={e => setForm(f => ({ ...f, imagem_url: e.target.value }))} />
+        {form.imagem_url && (
+          <img src={form.imagem_url} alt="Pré-visualização" className="w-full h-32 object-cover rounded-lg mb-3" onError={ev => { (ev.target as HTMLImageElement).style.display = 'none' }} />
         )}
         <Label>Descrição</Label>
         <Input placeholder="Detalhe opcional" value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} />
