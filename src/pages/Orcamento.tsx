@@ -18,8 +18,10 @@ interface CatalogoApiRow {
   peso_padrao_g: string | null; tempo_impressao_h: string | null; ativo: boolean
 }
 interface ClienteApiRow { id: string; nome: string }
+
+interface MaterialSalvo { materialId: string; peso: string }
 interface ItemSalvo {
-  nome: string; peso: string; materialId: string; horas: string; quantidade: number
+  nome: string; materiais: MaterialSalvo[]; horas: string; quantidade: number
   custoUnitario: number; valor: number
 }
 interface OrcamentoSalvoApiRow {
@@ -27,17 +29,20 @@ interface OrcamentoSalvoApiRow {
   itens: ItemSalvo[]; margem: string; custo_energia_hora: string; valor_total: string; convertido: boolean; criado_em: string
 }
 
+interface MaterialLinha { id: string; materialId: string; peso: string }
 interface ItemOrcamento {
   id: string
   nome: string
-  peso: string
-  materialIdx: number
+  materiais: MaterialLinha[]
   horas: string
   quantidade: string
 }
 
+function novaLinhaMaterial(): MaterialLinha {
+  return { id: crypto.randomUUID(), materialId: '', peso: '80' }
+}
 function novoItem(): ItemOrcamento {
-  return { id: crypto.randomUUID(), nome: '', peso: '80', materialIdx: 0, horas: '6', quantidade: '1' }
+  return { id: crypto.randomUUID(), nome: '', materiais: [novaLinhaMaterial()], horas: '6', quantidade: '1' }
 }
 
 export function Orcamento() {
@@ -78,11 +83,23 @@ export function Orcamento() {
 
   const clienteNome = clientesApi.find(c => c.id === clienteId)?.nome ?? ''
 
-  function atualizarItem(id: string, campo: keyof ItemOrcamento, valor: string | number) {
+  function atualizarItem(id: string, campo: 'nome' | 'horas' | 'quantidade', valor: string) {
     setItens(lista => lista.map(it => (it.id === id ? { ...it, [campo]: valor } : it)))
   }
   function removerItem(id: string) {
     setItens(lista => (lista.length > 1 ? lista.filter(it => it.id !== id) : lista))
+  }
+  function atualizarMaterialLinha(itemId: string, linhaId: string, campo: 'materialId' | 'peso', valor: string) {
+    setItens(lista => lista.map(it => it.id !== itemId ? it : {
+      ...it,
+      materiais: it.materiais.map(l => l.id === linhaId ? { ...l, [campo]: valor } : l)
+    }))
+  }
+  function adicionarMaterialLinha(itemId: string) {
+    setItens(lista => lista.map(it => it.id !== itemId ? it : { ...it, materiais: [...it.materiais, novaLinhaMaterial()] }))
+  }
+  function removerMaterialLinha(itemId: string, linhaId: string) {
+    setItens(lista => lista.map(it => it.id !== itemId || it.materiais.length === 1 ? it : { ...it, materiais: it.materiais.filter(l => l.id !== linhaId) }))
   }
 
   const calculo = useMemo(() => {
@@ -90,9 +107,11 @@ export function Orcamento() {
     const custoEnergiaHoraNum = parseFloat(custoEnergiaHora.replace(',', '.')) || 0
 
     const linhas = itens.map(it => {
-      const pesoG = parseFloat(it.peso.replace(',', '.')) || 0
-      const precoKg = materiais[it.materialIdx]?.precoKg ?? 0
-      const custoMaterial = (pesoG / 1000) * precoKg
+      const custoMaterial = it.materiais.reduce((s, l) => {
+        const pesoG = parseFloat(l.peso.replace(',', '.')) || 0
+        const precoKg = materiais.find(m => m.id === l.materialId)?.precoKg ?? 0
+        return s + (pesoG / 1000) * precoKg
+      }, 0)
       const custoEnergia = (parseFloat(it.horas.replace(',', '.')) || 0) * custoEnergiaHoraNum
       const custoTotal = custoMaterial + custoEnergia
       const precoUnitario = custoTotal * (1 + margemNum)
@@ -103,6 +122,10 @@ export function Orcamento() {
 
     return { linhas, total: linhas.reduce((s, l) => s + l.precoLinha, 0) }
   }, [itens, materiais, margem, custoEnergiaHora])
+
+  function nomesMateriais(it: ItemOrcamento) {
+    return it.materiais.map(l => materiais.find(m => m.id === l.materialId)?.nome).filter(Boolean).join(' + ')
+  }
 
   function enviarWhatsApp() {
     const listaTexto = calculo.linhas.map(l => `• ${l.item.nome || 'Peça'} (x${l.qtd}) — ${formatMoney(l.precoLinha)}`).join('\n')
@@ -161,8 +184,7 @@ export function Orcamento() {
     try {
       const itensSalvos: ItemSalvo[] = calculo.linhas.map(l => ({
         nome: l.item.nome || 'Peça personalizada',
-        peso: l.item.peso,
-        materialId: materiais[l.item.materialIdx]?.id ?? '',
+        materiais: l.item.materiais.filter(m => m.materialId).map(m => ({ materialId: m.materialId, peso: m.peso })),
         horas: l.item.horas,
         quantidade: l.qtd,
         custoUnitario: l.custoMaterial + l.custoEnergia,
@@ -200,8 +222,9 @@ export function Orcamento() {
         ? o.itens.map(it => ({
             id: crypto.randomUUID(),
             nome: it.nome,
-            peso: it.peso ?? '80',
-            materialIdx: Math.max(materiais.findIndex(m => m.id === it.materialId), 0),
+            materiais: (it.materiais && it.materiais.length > 0)
+              ? it.materiais.map(m => ({ id: crypto.randomUUID(), materialId: m.materialId, peso: m.peso }))
+              : [novaLinhaMaterial()],
             horas: it.horas ?? '6',
             quantidade: String(it.quantidade)
           }))
@@ -218,13 +241,17 @@ export function Orcamento() {
     setConvertendoId(orc.id)
     try {
       for (const item of orc.itens) {
-        const materialNome = materiais.find(m => m.id === item.materialId)?.nome ?? null
+        const materiaisItem = item.materiais ?? []
+        const materiaisUsados = materiaisItem.filter(m => m.materialId).map(m => ({ material_id: m.materialId, peso_g: Number(m.peso) }))
+        const nomes = materiaisItem.map(m => materiais.find(mm => mm.id === m.materialId)?.nome).filter(Boolean).join(' + ')
+        const primeira = materiaisItem[0]
         await api.post('/api/pedidos', {
           cliente_id: orc.cliente_id,
           peca: item.quantidade > 1 ? `${item.nome} (x${item.quantidade})` : item.nome,
-          material: materialNome,
-          material_id: item.materialId || null,
-          peso_filamento_g: item.peso ? Number(item.peso) : null,
+          material: nomes || null,
+          material_id: primeira?.materialId || null,
+          peso_filamento_g: primeira?.peso ? Number(primeira.peso) : null,
+          materiais_usados: materiaisUsados,
           link_arquivo: null,
           observacoes: `Gerado a partir de orçamento salvo · ${item.horas ?? '?'}h de impressão`,
           valor: item.valor,
@@ -292,7 +319,7 @@ export function Orcamento() {
   return (
     <div>
       <h1 className="text-2xl font-semibold m-0">Orçamento</h1>
-      <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Monta orçamentos com uma ou várias peças {usandoMock && '(materiais de exemplo)'}</p>
+      <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Monta orçamentos com uma ou várias peças (com uma ou várias cores cada) {usandoMock && '(materiais de exemplo)'}</p>
 
       {vazio ? (
         <Card>
@@ -344,13 +371,11 @@ export function Orcamento() {
                       onChange={e => {
                         const prod = catalogoApi.find(p => p.id === e.target.value)
                         if (!prod) return
-                        const idxMaterial = prod.material_id ? materiais.findIndex(m => m.id === prod.material_id) : -1
                         setItens(lista => lista.map(x => x.id === it.id ? {
                           ...x,
                           nome: prod.nome,
-                          peso: prod.peso_padrao_g ?? x.peso,
                           horas: prod.tempo_impressao_h ?? x.horas,
-                          materialIdx: idxMaterial >= 0 ? idxMaterial : x.materialIdx
+                          materiais: prod.material_id ? [{ id: crypto.randomUUID(), materialId: prod.material_id, peso: prod.peso_padrao_g ?? '80' }] : x.materiais
                         } : x))
                       }}
                     >
@@ -361,23 +386,43 @@ export function Orcamento() {
                 )}
                 <Label>Nome da peça</Label>
                 <Input placeholder="Ex: Suporte de celular" value={it.nome} onChange={e => atualizarItem(it.id, 'nome', e.target.value)} />
-                <div className="grid grid-cols-2 gap-x-4">
-                  <div><Label>Peso (gramas)</Label><Input value={it.peso} onChange={e => atualizarItem(it.id, 'peso', e.target.value)} /></div>
-                  <div>
-                    <Label>Material</Label>
-                    <Select value={it.materialIdx} onChange={e => atualizarItem(it.id, 'materialIdx', Number(e.target.value))}>
-                      {materiais.map((m, i) => <option key={m.id} value={i}>{m.nome} — {formatMoney(m.precoKg)}/kg</option>)}
-                    </Select>
-                  </div>
+
+                <Label>Materiais (uma linha por cor/filamento)</Label>
+                <div className="flex flex-col gap-2 mb-3">
+                  {it.materiais.map(l => (
+                    <div key={l.id} className="grid grid-cols-[1fr_90px_28px] gap-2 items-start">
+                      <Select value={l.materialId} onChange={e => atualizarMaterialLinha(it.id, l.id, 'materialId', e.target.value)} className="!mb-0">
+                        <option value="">Selecione...</option>
+                        {materiais.map(m => <option key={m.id} value={m.id}>{m.nome} — {formatMoney(m.precoKg)}/kg</option>)}
+                      </Select>
+                      <Input placeholder="Peso (g)" value={l.peso} onChange={e => atualizarMaterialLinha(it.id, l.id, 'peso', e.target.value)} className="!mb-0" />
+                      <button
+                        type="button"
+                        onClick={() => removerMaterialLinha(it.id, l.id)}
+                        disabled={it.materiais.length === 1}
+                        className="w-7 h-9 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:text-red-600 disabled:opacity-20"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => adicionarMaterialLinha(it.id)}
+                  className="text-xs font-semibold text-[var(--primary)] flex items-center gap-1 mb-3 -mt-1"
+                >
+                  <Plus size={12} />Adicionar outro material/cor
+                </button>
+
                 <div className="grid grid-cols-2 gap-x-4">
                   <div><Label>Tempo de impressão (h)</Label><Input value={it.horas} onChange={e => atualizarItem(it.id, 'horas', e.target.value)} /></div>
                   <div><Label>Quantidade</Label><Input value={it.quantidade} onChange={e => atualizarItem(it.id, 'quantidade', e.target.value)} /></div>
                 </div>
                 <div className="flex justify-between flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)] bg-[var(--muted)] rounded-lg px-3 py-2 mt-1">
-                  <span>Custo/un.: {formatMoney((linha?.custoMaterial ?? 0) + (linha?.custoEnergia ?? 0))}</span>
                   <span>Custo material: {formatMoney(linha?.custoMaterial ?? 0)}</span>
                   <span>Custo energia: {formatMoney(linha?.custoEnergia ?? 0)}</span>
+                  <span>Custo/un.: {formatMoney((linha?.custoMaterial ?? 0) + (linha?.custoEnergia ?? 0))}</span>
                   <span>Preço/un.: {formatMoney(linha?.precoUnitario ?? 0)}</span>
                   <span className="font-semibold text-emerald-600 dark:text-emerald-400">Lucro: {formatMoney(linha?.lucroLinha ?? 0)}</span>
                 </div>
@@ -391,7 +436,7 @@ export function Orcamento() {
           <div className="font-bold mb-2.5">Resumo do orçamento</div>
           {calculo.linhas.map((l, i) => (
             <div key={l.item.id} className="flex justify-between text-[13px] py-1.5 border-b border-[var(--border)]">
-              <span>{l.item.nome || `Peça ${i + 1}`} {l.qtd > 1 ? `(x${l.qtd})` : ''}</span>
+              <span>{l.item.nome || `Peça ${i + 1}`} {l.qtd > 1 ? `(x${l.qtd})` : ''} {nomesMateriais(l.item) && <span className="text-[var(--muted-foreground)]">· {nomesMateriais(l.item)}</span>}</span>
               <span>{formatMoney(l.precoLinha)}</span>
             </div>
           ))}

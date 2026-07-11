@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Plus, ChevronLeft, ChevronRight, Trash2, Pencil, Link as LinkIcon, FileText, Search } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Trash2, Pencil, Link as LinkIcon, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Money, formatMoney } from '@/components/ui/Money'
 import { Modal } from '@/components/ui/Modal'
@@ -28,6 +28,8 @@ const statusLabel: Record<StatusPedido, string> = {
   orcamento: 'Orçamento', producao: 'Em produção', pronto: 'Pronto', entregue: 'Entregue'
 }
 
+interface MaterialUsado { material_id: string; peso_g: number }
+
 interface PedidoApiRow {
   id: string
   numero: number
@@ -44,6 +46,7 @@ interface PedidoApiRow {
   link_arquivo: string | null
   observacoes: string | null
   catalogo_produto_id: string | null
+  materiais_usados: MaterialUsado[] | null
 }
 interface ClienteApiRow { id: string; nome: string }
 interface MaterialApiRow { id: string; nome: string }
@@ -52,9 +55,26 @@ interface CatalogoApiRow {
   peso_padrao_g: string | null; preco_padrao: string | null; ativo: boolean
 }
 
+interface LinhaMaterial { id: string; material_id: string; peso_g: string }
+
+function novaLinhaMaterial(): LinhaMaterial {
+  return { id: crypto.randomUUID(), material_id: '', peso_g: '' }
+}
+
 const formVazio = {
   id: '', cliente_id: '', peca: '', valor: '', prazo: '', status: 'orcamento' as StatusPedido,
-  material_id: '', peso_filamento_g: '', link_arquivo: '', observacoes: '', catalogo_produto_id: ''
+  link_arquivo: '', observacoes: '', catalogo_produto_id: ''
+}
+
+// pega os materiais de um pedido (novo formato em lista, ou o antigo de 1 material só)
+function materiaisDoPedido(p: PedidoApiRow): LinhaMaterial[] {
+  if (p.materiais_usados && p.materiais_usados.length > 0) {
+    return p.materiais_usados.map(m => ({ id: crypto.randomUUID(), material_id: m.material_id, peso_g: String(m.peso_g) }))
+  }
+  if (p.material_id && p.peso_filamento_g) {
+    return [{ id: crypto.randomUUID(), material_id: p.material_id, peso_g: p.peso_filamento_g }]
+  }
+  return [novaLinhaMaterial()]
 }
 
 export function Pedidos() {
@@ -70,6 +90,7 @@ export function Pedidos() {
   const [salvando, setSalvando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
+  const [materiaisLinhas, setMateriaisLinhas] = useState<LinhaMaterial[]>([novaLinhaMaterial()])
 
   useEffect(() => {
     if ((location.state as { abrirModal?: boolean })?.abrirModal) {
@@ -95,6 +116,7 @@ export function Pedidos() {
 
   function abrirNovo() {
     setForm(formVazio)
+    setMateriaisLinhas([novaLinhaMaterial()])
     setModalOpen(true)
   }
 
@@ -102,10 +124,17 @@ export function Pedidos() {
     setForm({
       id: p.id, cliente_id: p.cliente_id, peca: p.peca, valor: String(p.valor).replace('.', ','),
       prazo: p.prazo ? p.prazo.slice(0, 10) : '', status: p.status,
-      material_id: p.material_id ?? '', peso_filamento_g: p.peso_filamento_g ?? '',
       link_arquivo: p.link_arquivo ?? '', observacoes: p.observacoes ?? '', catalogo_produto_id: p.catalogo_produto_id ?? ''
     })
+    setMateriaisLinhas(materiaisDoPedido(p))
     setModalOpen(true)
+  }
+
+  function atualizarLinha(id: string, campo: keyof LinhaMaterial, valor: string) {
+    setMateriaisLinhas(lista => lista.map(l => (l.id === id ? { ...l, [campo]: valor } : l)))
+  }
+  function removerLinha(id: string) {
+    setMateriaisLinhas(lista => (lista.length > 1 ? lista.filter(l => l.id !== id) : lista))
   }
 
   async function mudarStatus(id: string, novo: StatusPedido | null) {
@@ -131,13 +160,18 @@ export function Pedidos() {
     e.preventDefault()
     setSalvando(true)
     try {
-      const materialNome = materiaisApi.find(m => m.id === form.material_id)?.nome ?? null
+      const linhasValidas = materiaisLinhas.filter(l => l.material_id && l.peso_g)
+      const materiaisUsados = linhasValidas.map(l => ({ material_id: l.material_id, peso_g: Number(l.peso_g) }))
+      const nomesMateriais = linhasValidas.map(l => materiaisApi.find(m => m.id === l.material_id)?.nome).filter(Boolean)
+      const primeira = linhasValidas[0]
+
       const payload = {
         cliente_id: form.cliente_id,
         peca: form.peca,
-        material: materialNome,
-        material_id: form.material_id || null,
-        peso_filamento_g: form.peso_filamento_g ? Number(form.peso_filamento_g) : null,
+        material: nomesMateriais.length > 0 ? nomesMateriais.join(' + ') : null,
+        material_id: primeira?.material_id || null,
+        peso_filamento_g: primeira ? Number(primeira.peso_g) : null,
+        materiais_usados: materiaisUsados,
         link_arquivo: form.link_arquivo || null,
         observacoes: form.observacoes || null,
         valor: Number(form.valor.replace(',', '.')) || 0,
@@ -149,6 +183,7 @@ export function Pedidos() {
       else await api.post('/api/pedidos', payload)
       setModalOpen(false)
       setForm(formVazio)
+      setMateriaisLinhas([novaLinhaMaterial()])
       reload()
     } catch (err) {
       console.error('[Salvar] erro:', err)
@@ -169,13 +204,7 @@ export function Pedidos() {
       </div>
 
       <div className="relative mb-4 max-w-[320px]">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
-        <input
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          placeholder="Buscar por peça, cliente ou nº..."
-          className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--muted)] text-sm"
-        />
+        <Input placeholder="Buscar por peça, cliente ou nº..." value={busca} onChange={e => setBusca(e.target.value)} className="!mb-0" />
       </div>
 
       <div className="flex gap-3.5 overflow-x-auto">
@@ -205,7 +234,7 @@ export function Pedidos() {
                       <Pencil size={13} />
                     </button>
                   </div>
-                  {p.peca}{p.material_nome ? ` — ${p.material_nome}` : ''}
+                  {p.peca}{p.material ? ` — ${p.material}` : ''}
                   <div className="text-xs text-[var(--muted-foreground)] flex justify-between mt-1 mb-2">
                     <Money value={Number(p.valor)} />
                     <span>{p.prazo ? formatarDataBR(p.prazo) : '—'}</span>
@@ -264,8 +293,19 @@ export function Pedidos() {
             <div><span className="text-xs font-semibold text-[var(--muted-foreground)] block">Cliente</span>{fichaAberta.cliente_nome}</div>
             <div><span className="text-xs font-semibold text-[var(--muted-foreground)] block">Peça</span>{fichaAberta.peca}</div>
             <div><span className="text-xs font-semibold text-[var(--muted-foreground)] block">Status</span>{statusLabel[fichaAberta.status]}</div>
-            <div><span className="text-xs font-semibold text-[var(--muted-foreground)] block">Material</span>{fichaAberta.material_nome ?? '—'}</div>
-            <div><span className="text-xs font-semibold text-[var(--muted-foreground)] block">Peso de filamento usado</span>{fichaAberta.peso_filamento_g ? `${fichaAberta.peso_filamento_g}g` : '—'}</div>
+            <div>
+              <span className="text-xs font-semibold text-[var(--muted-foreground)] block mb-1">Materiais usados</span>
+              {materiaisDoPedido(fichaAberta).filter(l => l.material_id).length === 0 ? '—' : (
+                <div className="flex flex-col gap-1">
+                  {materiaisDoPedido(fichaAberta).map(l => (
+                    <div key={l.id} className="flex justify-between bg-[var(--muted)] rounded px-2.5 py-1.5 text-[13px]">
+                      <span>{materiaisApi.find(m => m.id === l.material_id)?.nome ?? fichaAberta.material_nome ?? '—'}</span>
+                      <span className="text-[var(--muted-foreground)]">{l.peso_g}g</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div><span className="text-xs font-semibold text-[var(--muted-foreground)] block">Valor</span>{formatMoney(Number(fichaAberta.valor))}</div>
             <div><span className="text-xs font-semibold text-[var(--muted-foreground)] block">Prazo</span>{fichaAberta.prazo ? formatarDataBR(fichaAberta.prazo) : '—'}</div>
             {fichaAberta.link_arquivo && (
@@ -314,14 +354,10 @@ export function Pedidos() {
               onChange={e => {
                 const prod = catalogoApi.find(p => p.id === e.target.value)
                 if (!prod) return
-                setForm(f => ({
-                  ...f,
-                  peca: prod.nome,
-                  material_id: prod.material_id ?? f.material_id,
-                  peso_filamento_g: prod.peso_padrao_g ?? f.peso_filamento_g,
-                  valor: prod.preco_padrao ? String(prod.preco_padrao).replace('.', ',') : f.valor,
-                  catalogo_produto_id: prod.id
-                }))
+                setForm(f => ({ ...f, peca: prod.nome, valor: prod.preco_padrao ? String(prod.preco_padrao).replace('.', ',') : f.valor, catalogo_produto_id: prod.id }))
+                if (prod.material_id) {
+                  setMateriaisLinhas([{ id: crypto.randomUUID(), material_id: prod.material_id, peso_g: prod.peso_padrao_g ?? '' }])
+                }
               }}
             >
               <option value="">Preencher manualmente...</option>
@@ -332,16 +368,36 @@ export function Pedidos() {
 
         <Label>Peça</Label>
         <Input placeholder="Ex: Suporte de celular (x3)" value={form.peca} onChange={e => setForm(f => ({ ...f, peca: e.target.value }))} />
-        <div className="grid grid-cols-2 gap-x-4">
-          <div>
-            <Label>Material (com cor)</Label>
-            <Select value={form.material_id} onChange={e => setForm(f => ({ ...f, material_id: e.target.value }))}>
-              <option value="">Selecione...</option>
-              {materiaisApi.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
-            </Select>
-          </div>
-          <div><Label>Peso de filamento (g)</Label><Input placeholder="80" value={form.peso_filamento_g} onChange={e => setForm(f => ({ ...f, peso_filamento_g: e.target.value }))} /></div>
+
+        <Label>Materiais usados (uma linha por cor/filamento)</Label>
+        <div className="flex flex-col gap-2 mb-3">
+          {materiaisLinhas.map((linha, idx) => (
+            <div key={linha.id} className="grid grid-cols-[1fr_110px_28px] gap-2 items-start">
+              <Select value={linha.material_id} onChange={e => atualizarLinha(linha.id, 'material_id', e.target.value)} className="!mb-0">
+                <option value="">Selecione o material...</option>
+                {materiaisApi.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+              </Select>
+              <Input placeholder="Peso (g)" value={linha.peso_g} onChange={e => atualizarLinha(linha.id, 'peso_g', e.target.value)} className="!mb-0" />
+              <button
+                type="button"
+                onClick={() => removerLinha(linha.id)}
+                disabled={materiaisLinhas.length === 1}
+                className="w-7 h-9 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:text-red-600 disabled:opacity-20"
+              >
+                <Trash2 size={14} />
+              </button>
+              {idx === materiaisLinhas.length - 1 && null}
+            </div>
+          ))}
         </div>
+        <button
+          type="button"
+          onClick={() => setMateriaisLinhas(l => [...l, novaLinhaMaterial()])}
+          className="text-xs font-semibold text-[var(--primary)] flex items-center gap-1 mb-3 -mt-1"
+        >
+          <Plus size={13} />Adicionar outro material/cor
+        </button>
+
         <Label>Link do arquivo (STL/3MF)</Label>
         <Input placeholder="https://..." value={form.link_arquivo} onChange={e => setForm(f => ({ ...f, link_arquivo: e.target.value }))} />
         <div className="grid grid-cols-2 gap-x-4">
@@ -358,8 +414,8 @@ export function Pedidos() {
         <Label>Observações</Label>
         <Input placeholder="Detalhe opcional sobre a produção" value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} />
         {!form.cliente_id && <div className="text-xs text-[var(--muted-foreground)] mt-1">Escolha um cliente cadastrado antes de salvar.</div>}
-        {form.material_id && form.status === 'producao' && !form.id && (
-          <div className="text-xs text-amber-600 mt-1">Ao marcar como "Em produção", o peso de filamento informado é abatido do estoque automaticamente.</div>
+        {materiaisLinhas.some(l => l.material_id) && form.status === 'producao' && !form.id && (
+          <div className="text-xs text-amber-600 mt-1">Ao marcar como "Em produção", o peso de cada material informado é abatido do estoque automaticamente.</div>
         )}
       </Modal>
     </div>
