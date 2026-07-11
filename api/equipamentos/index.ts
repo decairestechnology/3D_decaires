@@ -23,22 +23,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { nome, tipo, valor, aquisicao, status } = req.body
+    const { nome, tipo, valor, aquisicao, status, vida_util_anos } = req.body
     const [novo] = await sql`
-      INSERT INTO equipamentos (nome, tipo, valor, aquisicao, status)
-      VALUES (${nome}, ${tipo}, ${valor}, ${aquisicao}, ${status ?? 'OK'})
+      INSERT INTO equipamentos (nome, tipo, valor, aquisicao, status, vida_util_anos)
+      VALUES (${nome}, ${tipo}, ${valor}, ${aquisicao}, ${status ?? 'OK'}, ${vida_util_anos ?? 3})
       RETURNING *
     `
     return res.status(201).json(novo)
   }
 
   if (req.method === 'PATCH' && id) {
-    const { nome, tipo, valor, aquisicao, status } = req.body
+    const { nome, tipo, valor, aquisicao, status, vida_util_anos } = req.body
     const [atualizado] = await sql`
       UPDATE equipamentos SET
         nome = COALESCE(${nome}, nome), tipo = COALESCE(${tipo}, tipo),
         valor = COALESCE(${valor}, valor), aquisicao = COALESCE(${aquisicao}, aquisicao),
-        status = COALESCE(${status}, status)
+        status = COALESCE(${status}, status), vida_util_anos = COALESCE(${vida_util_anos}, vida_util_anos)
       WHERE id = ${id} RETURNING *
     `
     if (!atualizado) return res.status(404).json({ error: 'Equipamento não encontrado' })

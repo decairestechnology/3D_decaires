@@ -1,20 +1,22 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Wrench, Banknote, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Wrench, Banknote, AlertTriangle, Pencil, Trash2, CalendarPlus, TrendingDown } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Money } from '@/components/ui/Money'
+import { Money, formatMoney } from '@/components/ui/Money'
 import { Modal } from '@/components/ui/Modal'
 import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input, Select } from '@/components/ui/Input'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { equipamentos as equipamentosMock } from '@/data/mockData'
-import { formatarDataBR, mesAno } from '@/lib/date'
+import { formatarDataBR, mesAno, soData } from '@/lib/date'
 
 interface EquipamentoApiRow {
-  id: string; nome: string; tipo: 'impressora' | 'ferramenta'; valor: string; aquisicao: string; status: string
+  id: string; nome: string; tipo: 'impressora' | 'ferramenta'; valor: string; aquisicao: string; status: string; vida_util_anos: number
 }
+interface AgendaApiRow { id: string; data: string; titulo: string; tipo: string; equipamento_id: string | null }
+interface EquipamentoUI { id: string; nome: string; tipo: 'impressora' | 'ferramenta'; valor: number; aquisicao: string; status: string; vidaUtilAnos: number }
 
 function badgeColor(status: string): 'green' | 'amber' | 'gray' {
   if (status.toLowerCase().includes('funcionando') || status === 'OK') return 'green'
@@ -22,11 +24,23 @@ function badgeColor(status: string): 'green' | 'amber' | 'gray' {
   return 'gray'
 }
 
-const formVazio = { id: '', nome: '', tipo: 'impressora', valor: '', aquisicao: '', status: 'OK' }
+function calcularDepreciacao(valor: number, aquisicao: string | null, vidaUtilAnos: number) {
+  if (!aquisicao || !valor) return { pctDepreciado: 0, valorAtual: valor }
+  const meses = (Date.now() - new Date(soData(aquisicao)).getTime()) / (1000 * 60 * 60 * 24 * 30.44)
+  const mesesTotais = vidaUtilAnos * 12
+  const pctDepreciado = Math.min(Math.max(meses / mesesTotais, 0), 1)
+  return { pctDepreciado: Math.round(pctDepreciado * 100), valorAtual: valor * (1 - pctDepreciado) }
+}
+
+const formVazio = { id: '', nome: '', tipo: 'impressora', valor: '', aquisicao: '', status: 'OK', vida_util_anos: '3' }
+const formManutencaoVazio = { data: '', horario: '' }
 
 export function Maquinario() {
   const { data, loading, error, reload } = useApi<EquipamentoApiRow[]>('/api/equipamentos', [])
+  const { data: agendaData, reload: reloadAgenda } = useApi<AgendaApiRow[]>('/api/agenda', [])
   const [modalOpen, setModalOpen] = useState(false)
+  const [modalManutencao, setModalManutencao] = useState<EquipamentoUI | null>(null)
+  const [formManutencao, setFormManutencao] = useState(formManutencaoVazio)
   const [salvando, setSalvando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
@@ -34,17 +48,24 @@ export function Maquinario() {
   const usandoMock = !loading && !!error
   const vazio = !loading && !error && data.length === 0
   const equipamentos = usandoMock
-    ? equipamentosMock
-    : data.map(e => ({ id: e.id, nome: e.nome, tipo: e.tipo, valor: Number(e.valor), aquisicao: e.aquisicao, status: e.status }))
+    ? equipamentosMock.map(e => ({ ...e, vidaUtilAnos: 3 }))
+    : data.map(e => ({ id: e.id, nome: e.nome, tipo: e.tipo, valor: Number(e.valor), aquisicao: e.aquisicao, status: e.status, vidaUtilAnos: e.vida_util_anos ?? 3 }))
 
   const impressoras = equipamentos.filter(e => e.tipo === 'impressora')
   const ferramentas = equipamentos.filter(e => e.tipo === 'ferramenta')
   const totalInvestido = equipamentos.reduce((s, e) => s + e.valor, 0)
   const pendentes = equipamentos.filter(e => e.status.toLowerCase().includes('pendente') || e.status.toLowerCase().includes('desgast'))
 
+  function proximaManutencao(equipamentoId: string) {
+    const hoje = soData(new Date().toISOString())
+    return agendaData
+      .filter(a => a.equipamento_id === equipamentoId && a.tipo === 'manutencao' && soData(a.data) >= hoje)
+      .sort((a, b) => soData(a.data).localeCompare(soData(b.data)))[0]
+  }
+
   function abrirNovo() { setForm(formVazio); setModalOpen(true) }
   function abrirEdicao(e: typeof equipamentos[number]) {
-    setForm({ id: e.id, nome: e.nome, tipo: e.tipo, valor: String(e.valor).replace('.', ','), aquisicao: e.aquisicao?.slice(0, 10) ?? '', status: e.status })
+    setForm({ id: e.id, nome: e.nome, tipo: e.tipo, valor: String(e.valor).replace('.', ','), aquisicao: e.aquisicao?.slice(0, 10) ?? '', status: e.status, vida_util_anos: String(e.vidaUtilAnos) })
     setModalOpen(true)
   }
 
@@ -55,7 +76,7 @@ export function Maquinario() {
     try {
       const payload = {
         nome: form.nome, tipo: form.tipo, valor: Number(form.valor.replace(',', '.')) || 0,
-        aquisicao: form.aquisicao || null, status: form.status
+        aquisicao: form.aquisicao || null, status: form.status, vida_util_anos: Number(form.vida_util_anos) || 3
       }
       if (form.id) await api.patch(`/api/equipamentos?id=${form.id}`, payload)
       else await api.post('/api/equipamentos', payload)
@@ -81,12 +102,37 @@ export function Maquinario() {
     }
   }
 
+  async function agendarManutencao(e: FormEvent) {
+    e.preventDefault()
+    if (!modalManutencao || !formManutencao.data) return
+    setSalvando(true)
+    try {
+      await api.post('/api/agenda', {
+        data: formManutencao.data,
+        horario: formManutencao.horario || null,
+        titulo: `Manutenção — ${modalManutencao.nome}`,
+        descricao: null,
+        tipo: 'manutencao',
+        equipamento_id: modalManutencao.id
+      })
+      setModalManutencao(null)
+      setFormManutencao(formManutencaoVazio)
+      reloadAgenda()
+      alert('Manutenção agendada! Aparece na Agenda também.')
+    } catch (err) {
+      console.error('[Agendar manutenção] erro:', err)
+      alert('Não deu pra agendar. Confere a conexão com o banco.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-5">
         <div>
           <h1 className="text-2xl font-semibold m-0">Maquinário e ferramentas</h1>
-          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Seus equipamentos, valor investido e manutenção {usandoMock && '(dados de exemplo)'}</p>
+          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Seus equipamentos, valor investido e manutenção {usandoMock && '(sem conexão com o banco)'}</p>
         </div>
         <Button variant="gradient" onClick={abrirNovo}><Plus size={15} />Novo equipamento</Button>
       </div>
@@ -111,26 +157,54 @@ export function Maquinario() {
         <Card><div className="text-center py-6 text-sm text-[var(--muted-foreground)]">Nenhuma impressora cadastrada ainda.</div></Card>
       ) : (
       <div className="flex gap-4 flex-wrap">
-        {impressoras.map(e => (
-          <Card key={e.id} className="flex-1 min-w-[260px]">
-            <div className="flex justify-between items-start">
-              <b className="text-sm">{e.nome}</b>
-              <div className="flex items-center gap-2">
-                <Badge color={badgeColor(e.status)}>{e.status}</Badge>
-                {confirmandoId === e.id ? null : !usandoMock && (
-                  <div className="flex gap-1">
-                    <button onClick={() => abrirEdicao(e)} className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]"><Pencil size={12} /></button>
-                    <button onClick={() => setConfirmandoId(e.id)} className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600"><Trash2 size={12} /></button>
-                  </div>
+        {impressoras.map(e => {
+          const dep = calcularDepreciacao(e.valor, e.aquisicao, e.vidaUtilAnos)
+          const proxima = proximaManutencao(e.id)
+          return (
+            <Card key={e.id} className="flex-1 min-w-[270px]">
+              <div className="flex justify-between items-start">
+                <b className="text-sm">{e.nome}</b>
+                <div className="flex items-center gap-2">
+                  <Badge color={badgeColor(e.status)}>{e.status}</Badge>
+                  {confirmandoId === e.id ? null : !usandoMock && (
+                    <div className="flex gap-1">
+                      <button onClick={() => abrirEdicao(e)} className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]"><Pencil size={12} /></button>
+                      <button onClick={() => setConfirmandoId(e.id)} className="w-6 h-6 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600"><Trash2 size={12} /></button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {confirmandoId === e.id && <div className="mt-2"><InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluir(e.id)} /></div>}
+              <div className="text-xs text-[var(--muted-foreground)] mt-1.5">
+                Comprada em {e.aquisicao ? formatarDataBR(e.aquisicao) : '—'} · <Money value={e.valor} />
+              </div>
+
+              <div className="bg-[var(--muted)] rounded-lg p-2.5 mt-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1 text-[var(--muted-foreground)]"><TrendingDown size={12} />Depreciação ({e.vidaUtilAnos} anos)</span>
+                  <span className="font-bold">{dep.pctDepreciado}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-[var(--border)] overflow-hidden mt-1.5">
+                  <div className="h-full rounded-full bg-amber-500" style={{ width: `${dep.pctDepreciado}%` }} />
+                </div>
+                <div className="text-xs text-[var(--muted-foreground)] mt-1">Valor estimado hoje: {formatMoney(dep.valorAtual)}</div>
+              </div>
+
+              <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-[var(--border)]">
+                {proxima ? (
+                  <span className="text-xs text-[var(--muted-foreground)]">Próxima manutenção: <b className="text-[var(--foreground)]">{formatarDataBR(proxima.data)}</b></span>
+                ) : (
+                  <span className="text-xs text-[var(--muted-foreground)]">Sem manutenção agendada</span>
+                )}
+                {!usandoMock && (
+                  <button onClick={() => setModalManutencao(e)} className="text-xs font-semibold text-[var(--primary)] flex items-center gap-1">
+                    <CalendarPlus size={13} />Agendar
+                  </button>
                 )}
               </div>
-            </div>
-            {confirmandoId === e.id && <div className="mt-2"><InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluir(e.id)} /></div>}
-            <div className="text-xs text-[var(--muted-foreground)] mt-1.5">
-              Comprada em {e.aquisicao ? formatarDataBR(e.aquisicao) : '—'} · <Money value={e.valor} />
-            </div>
-          </Card>
-        ))}
+            </Card>
+          )
+        })}
       </div>
       )}
 
@@ -201,8 +275,28 @@ export function Maquinario() {
         </div>
         <div className="grid grid-cols-2 gap-x-4">
           <div><Label>Data de aquisição</Label><Input type="date" value={form.aquisicao} onChange={e => setForm(f => ({ ...f, aquisicao: e.target.value }))} /></div>
-          <div><Label>Status</Label><Input placeholder="OK" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} /></div>
+          <div><Label>Vida útil (anos)</Label><Input placeholder="3" value={form.vida_util_anos} onChange={e => setForm(f => ({ ...f, vida_util_anos: e.target.value }))} /></div>
         </div>
+        <Label>Status</Label>
+        <Input placeholder="OK" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} />
+      </Modal>
+
+      <Modal
+        open={!!modalManutencao}
+        onClose={() => setModalManutencao(null)}
+        title={`Agendar manutenção — ${modalManutencao?.nome ?? ''}`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setModalManutencao(null)}>Cancelar</Button>
+            <Button variant="gradient" disabled={salvando} onClick={agendarManutencao}><CalendarPlus size={15} />{salvando ? 'Agendando...' : 'Agendar'}</Button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-2 gap-x-4">
+          <div><Label>Data</Label><Input type="date" value={formManutencao.data} onChange={e => setFormManutencao(f => ({ ...f, data: e.target.value }))} /></div>
+          <div><Label>Horário (opcional)</Label><Input type="time" value={formManutencao.horario} onChange={e => setFormManutencao(f => ({ ...f, horario: e.target.value }))} /></div>
+        </div>
+        <div className="text-xs text-[var(--muted-foreground)]">Isso cria um compromisso do tipo "Manutenção" na sua Agenda automaticamente.</div>
       </Modal>
     </div>
   )

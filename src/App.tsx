@@ -10,6 +10,8 @@ import { Clientes } from '@/pages/Clientes'
 import { Estoque } from '@/pages/Estoque'
 import { Financeiro } from '@/pages/Financeiro'
 import { Relatorios } from '@/pages/Relatorios'
+import { RankingClientes } from '@/pages/RankingClientes'
+import { RankingProdutos } from '@/pages/RankingProdutos'
 import { Maquinario } from '@/pages/Maquinario'
 import { Configuracoes } from '@/pages/Configuracoes'
 
@@ -32,6 +34,8 @@ export default function App() {
         <Route path="/estoque" element={<Estoque />} />
         <Route path="/financeiro" element={<Financeiro />} />
         <Route path="/relatorios" element={<Relatorios />} />
+        <Route path="/relatorios/ranking-clientes" element={<RankingClientes />} />
+        <Route path="/relatorios/ranking-produtos" element={<RankingProdutos />} />
         <Route path="/maquinario" element={<Maquinario />} />
         <Route path="/configuracoes" element={<Configuracoes />} />
       </Route>

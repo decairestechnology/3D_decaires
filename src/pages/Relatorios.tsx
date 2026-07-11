@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Download, Sparkles, TrendingUp, TrendingDown, Trophy } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Download, Sparkles, TrendingUp, TrendingDown, Trophy, Package as PackageIcon, ChevronRight } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Label, Input } from '@/components/ui/Input'
 import { formatMoney } from '@/components/ui/Money'
 import { useApi } from '@/lib/useApi'
+import { api } from '@/lib/api'
 import { soData } from '@/lib/date'
 import { lancamentos as lancamentosMock } from '@/data/mockData'
 
@@ -12,6 +14,7 @@ interface LancamentoApiRow {
   id: string; data: string; descricao: string; tipo: 'receita' | 'despesa'; valor: string; categoria?: string
 }
 interface ClienteApiRow { id: string; nome: string; pedidos: number; total_gasto: string }
+interface PedidoApiRow { id: string; peca: string; valor: string }
 
 const categoriaLabel: Record<string, string> = {
   vendas: 'Vendas', materiais: 'Materiais', energia: 'Energia', manutencao: 'Manutenção', outros: 'Outros'
@@ -21,8 +24,10 @@ const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set
 type Periodo = '3' | '6' | '12' | 'personalizado'
 
 export function Relatorios() {
+  const navigate = useNavigate()
   const { data, loading, error } = useApi<LancamentoApiRow[]>('/api/lancamentos', [])
   const { data: clientesData } = useApi<ClienteApiRow[]>('/api/clientes', [])
+  const { data: pedidosData } = useApi<PedidoApiRow[]>('/api/pedidos', [])
 
   const usandoMock = !loading && !!error
   const vazio = !loading && !error && data.length === 0
@@ -34,6 +39,7 @@ export function Relatorios() {
   const [dataInicio, setDataInicio] = useState('')
   const [dataFim, setDataFim] = useState('')
   const [analise, setAnalise] = useState('Peça pra Scout ler os números do período e apontar o que se destaca.')
+  const [analisando, setAnalisando] = useState(false)
 
   const [potencia, setPotencia] = useState('220')
   const [horas, setHoras] = useState('96')
@@ -98,8 +104,82 @@ export function Relatorios() {
       .map(c => ({ nome: c.nome, pedidos: c.pedidos, total: Number(c.total_gasto) }))
       .filter(c => c.total > 0)
       .sort((a, b) => b.total - a.total)
-      .slice(0, 5)
   }, [clientesData])
+
+  const rankingProdutos = useMemo(() => {
+    const totais: Record<string, { qtd: number; total: number }> = {}
+    pedidosData.forEach(p => {
+      const nome = p.peca.trim()
+      if (!totais[nome]) totais[nome] = { qtd: 0, total: 0 }
+      totais[nome].qtd += 1
+      totais[nome].total += Number(p.valor)
+    })
+    return Object.entries(totais)
+      .map(([nome, v]) => ({ nome, qtd: v.qtd, total: v.total }))
+      .sort((a, b) => b.total - a.total)
+  }, [pedidosData])
+
+  async function gerarAnalise() {
+    setAnalisando(true)
+    try {
+      const pergunta = `Analisa meu financeiro do período de ${periodo === 'personalizado' ? 'personalizado' : periodo + ' meses'}: lucro atual ${formatMoney(comparacaoMensal.atual.lucro)} vs mês anterior ${formatMoney(comparacaoMensal.anterior.lucro)}. O que se destaca?`
+      const { reply } = await api.post<{ reply: string }>('/api/scout', { question: pergunta })
+      setAnalise(reply)
+    } catch (err) {
+      console.error('[Gerar análise] erro:', err)
+      setAnalise('Não consegui gerar a análise agora. Confere se ANTHROPIC_API_KEY está configurada na Vercel.')
+    } finally {
+      setAnalisando(false)
+    }
+  }
+
+  function gerarPdf() {
+    const janela = window.open('', '_blank', 'width=700,height=850')
+    if (!janela) return
+    const linhasClientes = rankingClientes.slice(0, 10)
+      .map((c, i) => `<tr><td>${i + 1}º</td><td>${c.nome}</td><td>${c.pedidos}</td><td>${formatMoney(c.total)}</td></tr>`).join('')
+    const linhasProdutos = rankingProdutos.slice(0, 10)
+      .map((p, i) => `<tr><td>${i + 1}º</td><td>${p.nome}</td><td>${p.qtd}</td><td>${formatMoney(p.total)}</td></tr>`).join('')
+    janela.document.write(`
+      <html>
+        <head>
+          <title>Relatório — DeCaires 3D</title>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; color: #0F172A; }
+            .logo { width: 56px; height: 56px; margin-bottom: 8px; }
+            h1 { font-size: 20px; margin: 0 0 2px 0; }
+            h2 { font-size: 14px; margin: 28px 0 8px 0; }
+            .sub { color: #64748B; font-size: 13px; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+            th { text-align: left; font-size: 11px; color: #64748B; padding: 6px 0; border-bottom: 1px solid #E2E8F0; }
+            td { padding: 6px 0; border-bottom: 1px solid #E2E8F0; font-size: 13px; }
+            .kpis { display: flex; gap: 16px; margin-bottom: 8px; }
+            .kpi { background: #F8FAFC; border-radius: 8px; padding: 12px 16px; flex: 1; }
+            .kpi .label { font-size: 11px; color: #64748B; }
+            .kpi .valor { font-size: 18px; font-weight: 800; }
+          </style>
+        </head>
+        <body>
+          <img class="logo" src="${window.location.origin}/logo.png" />
+          <h1>DeCaires 3D — Relatório</h1>
+          <div class="sub">Gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
+          <div class="kpis">
+            <div class="kpi"><div class="label">LUCRO (mês)</div><div class="valor">${formatMoney(comparacaoMensal.atual.lucro)}</div></div>
+            <div class="kpi"><div class="label">RECEITA (mês)</div><div class="valor">${formatMoney(comparacaoMensal.atual.receita)}</div></div>
+            <div class="kpi"><div class="label">DESPESA (mês)</div><div class="valor">${formatMoney(comparacaoMensal.atual.despesa)}</div></div>
+          </div>
+          <h2>RANKING DE CLIENTES</h2>
+          <table><tr><th>#</th><th>Cliente</th><th>Pedidos</th><th>Total</th></tr>${linhasClientes || '<tr><td colspan="4">Sem dados</td></tr>'}</table>
+          <h2>RANKING DE PRODUTOS</h2>
+          <table><tr><th>#</th><th>Produto</th><th>Qtd. vendida</th><th>Total</th></tr>${linhasProdutos || '<tr><td colspan="4">Sem dados</td></tr>'}</table>
+        </body>
+      </html>
+    `)
+    janela.document.close()
+    janela.focus()
+    setTimeout(() => janela.print(), 300)
+  }
 
   const distribuicaoGastos = useMemo(() => {
     const totais: Record<string, number> = {}
@@ -119,7 +199,7 @@ export function Relatorios() {
           <h1 className="text-2xl font-semibold m-0">Relatórios</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Como o período selecionado se comportou {usandoMock && '(dados de exemplo)'}</p>
         </div>
-        <Button variant="gradient"><Download size={15} />Baixar PDF</Button>
+        <Button variant="gradient" onClick={gerarPdf}><Download size={15} />Baixar PDF</Button>
       </div>
 
       <div className="mb-4 flex items-center gap-2 flex-wrap">
@@ -160,10 +240,10 @@ export function Relatorios() {
           </div>
         </div>
         <span
-          onClick={() => setAnalise('Peça isso na barra da Scout lá em cima — ela lê seus dados reais e te dá uma análise sob medida.')}
+          onClick={gerarAnalise}
           className="text-xs font-bold text-[var(--secondary)] cursor-pointer whitespace-nowrap flex items-center gap-1"
         >
-          <Sparkles size={12} /> gerar análise
+          <Sparkles size={12} className={analisando ? 'animate-pulse' : ''} /> {analisando ? 'pensando...' : 'gerar análise'}
         </span>
       </div>
 
@@ -222,36 +302,43 @@ export function Relatorios() {
         </Card>
       </div>
 
-      <h2 className="text-[1.05rem] font-semibold mt-7 mb-3 flex items-center gap-2"><Trophy size={17} className="text-amber-500" />Ranking de clientes</h2>
-      <Card className="p-0">
-        {rankingClientes.length === 0 ? (
-          <div className="text-center py-6 text-xs text-[var(--muted-foreground)]">Nenhum pedido com valor lançado ainda.</div>
-        ) : (
-          <table className="w-full border-collapse text-[13.5px]">
-            <thead>
-              <tr>
-                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]">#</th>
-                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]">Cliente</th>
-                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]">Pedidos</th>
-                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-2.5 py-2 border-b border-[var(--border)]">Total gasto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rankingClientes.map((c, i) => {
-                const last = i === rankingClientes.length - 1
-                return (
-                  <tr key={c.nome}>
-                    <td className={`px-2.5 py-2.5 font-bold ${!last ? 'border-b border-[var(--border)]' : ''}`}>{i + 1}º</td>
-                    <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{c.nome}</td>
-                    <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{c.pedidos}</td>
-                    <td className={`px-2.5 py-2.5 font-semibold ${!last ? 'border-b border-[var(--border)]' : ''}`}>{formatMoney(c.total)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </Card>
+      <div className="flex gap-4 flex-wrap mt-7">
+        <Card className="flex-1 min-w-[280px] cursor-pointer hover:border-[var(--primary)]" onClick={() => navigate('/relatorios/ranking-clientes')}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 font-bold"><Trophy size={17} className="text-amber-500" />Ranking de clientes</div>
+            <ChevronRight size={16} className="text-[var(--muted-foreground)]" />
+          </div>
+          {rankingClientes.length === 0 ? (
+            <div className="text-xs text-[var(--muted-foreground)] py-3">Nenhum pedido com valor lançado ainda.</div>
+          ) : (
+            rankingClientes.slice(0, 5).map((c, i) => (
+              <div key={c.nome} className="flex justify-between items-center py-1.5 text-[13px]">
+                <span>{i + 1}º {c.nome}</span>
+                <span className="font-semibold">{formatMoney(c.total)}</span>
+              </div>
+            ))
+          )}
+          {rankingClientes.length > 5 && <div className="text-xs text-[var(--primary)] font-semibold mt-2">Ver ranking completo →</div>}
+        </Card>
+
+        <Card className="flex-1 min-w-[280px] cursor-pointer hover:border-[var(--primary)]" onClick={() => navigate('/relatorios/ranking-produtos')}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 font-bold"><PackageIcon size={17} className="text-[var(--primary)]" />Ranking de produtos</div>
+            <ChevronRight size={16} className="text-[var(--muted-foreground)]" />
+          </div>
+          {rankingProdutos.length === 0 ? (
+            <div className="text-xs text-[var(--muted-foreground)] py-3">Nenhum pedido lançado ainda.</div>
+          ) : (
+            rankingProdutos.slice(0, 5).map((p, i) => (
+              <div key={p.nome} className="flex justify-between items-center py-1.5 text-[13px]">
+                <span>{i + 1}º {p.nome}</span>
+                <span className="font-semibold">{formatMoney(p.total)}</span>
+              </div>
+            ))
+          )}
+          {rankingProdutos.length > 5 && <div className="text-xs text-[var(--primary)] font-semibold mt-2">Ver ranking completo →</div>}
+        </Card>
+      </div>
 
       <h2 className="text-[1.05rem] font-semibold mt-7 mb-1">Calculadora de energia da impressão</h2>
       <p className="text-[var(--muted-foreground)] text-sm mb-4">
