@@ -13,6 +13,10 @@ import { materiais as materiaisMock } from '@/data/mockData'
 import { carregarPreferencias } from '@/lib/settings'
 
 interface MaterialApiRow { id: string; nome: string; preco_kg: string }
+interface CatalogoApiRow {
+  id: string; codigo: string; nome: string; material_id: string | null
+  peso_padrao_g: string | null; tempo_impressao_h: string | null; ativo: boolean
+}
 interface ClienteApiRow { id: string; nome: string }
 interface ItemSalvo {
   nome: string; peso: string; materialId: string; horas: string; quantidade: number
@@ -38,6 +42,8 @@ function novoItem(): ItemOrcamento {
 
 export function Orcamento() {
   const { data, loading, error } = useApi<MaterialApiRow[]>('/api/materiais', [])
+  const { data: catalogoData } = useApi<CatalogoApiRow[]>('/api/catalogo', [])
+  const catalogoApi = catalogoData.filter(p => p.ativo)
   const usandoMock = !loading && !!error
   const vazio = !loading && !error && data.length === 0
   const materiais = usandoMock
@@ -330,6 +336,29 @@ export function Orcamento() {
                     )}
                   </div>
                 </div>
+                {catalogoApi.length > 0 && (
+                  <>
+                    <Label>Produto do catálogo (opcional)</Label>
+                    <Select
+                      value=""
+                      onChange={e => {
+                        const prod = catalogoApi.find(p => p.id === e.target.value)
+                        if (!prod) return
+                        const idxMaterial = prod.material_id ? materiais.findIndex(m => m.id === prod.material_id) : -1
+                        setItens(lista => lista.map(x => x.id === it.id ? {
+                          ...x,
+                          nome: prod.nome,
+                          peso: prod.peso_padrao_g ?? x.peso,
+                          horas: prod.tempo_impressao_h ?? x.horas,
+                          materialIdx: idxMaterial >= 0 ? idxMaterial : x.materialIdx
+                        } : x))
+                      }}
+                    >
+                      <option value="">Preencher manualmente...</option>
+                      {catalogoApi.map(p => <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>)}
+                    </Select>
+                  </>
+                )}
                 <Label>Nome da peça</Label>
                 <Input placeholder="Ex: Suporte de celular" value={it.nome} onChange={e => atualizarItem(it.id, 'nome', e.target.value)} />
                 <div className="grid grid-cols-2 gap-x-4">

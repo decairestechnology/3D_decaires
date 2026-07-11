@@ -46,6 +46,10 @@ interface PedidoApiRow {
 }
 interface ClienteApiRow { id: string; nome: string }
 interface MaterialApiRow { id: string; nome: string }
+interface CatalogoApiRow {
+  id: string; codigo: string; nome: string; material_id: string | null
+  peso_padrao_g: string | null; preco_padrao: string | null; ativo: boolean
+}
 
 const formVazio = {
   id: '', cliente_id: '', peca: '', valor: '', prazo: '', status: 'orcamento' as StatusPedido,
@@ -57,6 +61,8 @@ export function Pedidos() {
   const { data, loading, error, reload } = useApi<PedidoApiRow[]>('/api/pedidos', [])
   const { data: clientesApi } = useApi<ClienteApiRow[]>('/api/clientes', [])
   const { data: materiaisApi } = useApi<MaterialApiRow[]>('/api/materiais', [])
+  const { data: catalogoData } = useApi<CatalogoApiRow[]>('/api/catalogo', [])
+  const catalogoApi = catalogoData.filter(p => p.ativo)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [fichaAberta, setFichaAberta] = useState<PedidoApiRow | null>(null)
@@ -297,6 +303,30 @@ export function Pedidos() {
           <option value="">Selecione...</option>
           {clientesOptions.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
         </Select>
+
+        {catalogoApi.length > 0 && (
+          <>
+            <Label>Produto do catálogo (opcional)</Label>
+            <Select
+              value=""
+              onChange={e => {
+                const prod = catalogoApi.find(p => p.id === e.target.value)
+                if (!prod) return
+                setForm(f => ({
+                  ...f,
+                  peca: prod.nome,
+                  material_id: prod.material_id ?? f.material_id,
+                  peso_filamento_g: prod.peso_padrao_g ?? f.peso_filamento_g,
+                  valor: prod.preco_padrao ? String(prod.preco_padrao).replace('.', ',') : f.valor
+                }))
+              }}
+            >
+              <option value="">Preencher manualmente...</option>
+              {catalogoApi.map(p => <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>)}
+            </Select>
+          </>
+        )}
+
         <Label>Peça</Label>
         <Input placeholder="Ex: Suporte de celular (x3)" value={form.peca} onChange={e => setForm(f => ({ ...f, peca: e.target.value }))} />
         <div className="grid grid-cols-2 gap-x-4">

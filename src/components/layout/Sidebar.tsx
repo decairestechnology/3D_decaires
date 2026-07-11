@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Calendar, Package, Calculator, Users, Boxes,
-  Wallet, BarChart2, Wrench, Settings, ChevronLeft, Image
+  Wallet, BarChart2, Wrench, Settings, ChevronLeft, Tag
 } from 'lucide-react'
 
 const navItems = [
@@ -11,7 +11,7 @@ const navItems = [
   { to: '/orcamento', label: 'Orçamento', icon: Calculator },
   { to: '/clientes', label: 'Clientes', icon: Users },
   { to: '/estoque', label: 'Estoque', icon: Boxes },
-  { to: '/catalogo', label: 'Catálogo', icon: Image },
+  { to: '/catalogo', label: 'Catálogo', icon: Tag },
   { to: '/financeiro', label: 'Financeiro', icon: Wallet },
   { to: '/relatorios', label: 'Relatórios', icon: BarChart2 },
   { to: '/maquinario', label: 'Maquinário', icon: Wrench },
