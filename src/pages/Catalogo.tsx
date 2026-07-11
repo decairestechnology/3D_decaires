@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, ImageOff, EyeOff, Eye as EyeIcon } from 'lucide-react'
+import { Plus, Pencil, Trash2, ImageOff, EyeOff, Eye as EyeIcon, Boxes } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -14,19 +14,50 @@ interface ProdutoApiRow {
   id: string; nome: string; descricao: string | null; imagem_url: string | null
   preco: string; material: string | null; ativo: boolean
 }
+interface ProdutoProntoApiRow {
+  id: string; nome: string; material: string | null; quantidade: number; preco_venda: string
+}
 
 const formVazio = { id: '', nome: '', descricao: '', imagem_url: '', preco: '', material: '' }
 
 export function Catalogo() {
   const { data, loading, error, reload } = useApi<ProdutoApiRow[]>('/api/catalogo', [])
+  const { data: produtosProntos, reload: reloadProntos } = useApi<ProdutoProntoApiRow[]>('/api/produtos-prontos', [])
   const [modalOpen, setModalOpen] = useState(false)
   const [salvando, setSalvando] = useState(false)
+  const [importando, setImportando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
 
   const usandoMock = !loading && !!error
   const vazio = !loading && !error && data.length === 0
   const produtos = usandoMock ? [] : data
+
+  const naoImportados = produtosProntos.filter(pp => !produtos.some(p => p.nome === pp.nome))
+
+  async function importarDoEstoque() {
+    if (naoImportados.length === 0) return
+    setImportando(true)
+    try {
+      for (const pp of naoImportados) {
+        await api.post('/api/catalogo', {
+          nome: pp.nome,
+          descricao: null,
+          imagem_url: null,
+          preco: Number(pp.preco_venda) || 0,
+          material: pp.material
+        })
+      }
+      reload()
+      alert(`${naoImportados.length} produto(s) importado(s) do estoque! Falta só adicionar a imagem de cada um.`)
+    } catch (err) {
+      console.error('[Importar do estoque] erro:', err)
+      alert('Não deu pra importar. Confere a conexão com o banco.')
+    } finally {
+      setImportando(false)
+      reloadProntos()
+    }
+  }
 
   function abrirNovo() { setForm(formVazio); setModalOpen(true) }
   function abrirEdicao(p: ProdutoApiRow) {
@@ -83,7 +114,14 @@ export function Catalogo() {
           <h1 className="text-2xl font-semibold m-0">Catálogo</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Produtos prontos pra mostrar e vender {usandoMock && '(sem conexão com o banco)'}</p>
         </div>
-        <Button variant="gradient" onClick={abrirNovo}><Plus size={15} />Novo produto</Button>
+        <div className="flex items-center gap-2">
+          {naoImportados.length > 0 && (
+            <Button variant="ghost" onClick={importarDoEstoque} disabled={importando}>
+              <Boxes size={15} />{importando ? 'Importando...' : `Importar do estoque (${naoImportados.length})`}
+            </Button>
+          )}
+          <Button variant="gradient" onClick={abrirNovo}><Plus size={15} />Novo produto</Button>
+        </div>
       </div>
 
       {vazio ? (

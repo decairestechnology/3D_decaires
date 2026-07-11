@@ -127,7 +127,8 @@ export function Relatorios() {
       setAnalise(reply)
     } catch (err) {
       console.error('[Gerar análise] erro:', err)
-      setAnalise('Não consegui gerar a análise agora. Confere se ANTHROPIC_API_KEY está configurada na Vercel.')
+      const detalhe = err instanceof Error ? err.message : 'erro desconhecido'
+      setAnalise(`Não consegui gerar a análise agora. Detalhe: ${detalhe.slice(0, 150)} (mais detalhe no console, F12).`)
     } finally {
       setAnalisando(false)
     }

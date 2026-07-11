@@ -202,10 +202,15 @@ export function Orcamento() {
     setConvertendoId(orc.id)
     try {
       for (const item of orc.itens) {
+        const materialNome = materiais.find(m => m.id === item.materialId)?.nome ?? null
         await api.post('/api/pedidos', {
           cliente_id: orc.cliente_id,
           peca: item.quantidade > 1 ? `${item.nome} (x${item.quantidade})` : item.nome,
-          material: null,
+          material: materialNome,
+          material_id: item.materialId || null,
+          peso_filamento_g: item.peso ? Number(item.peso) : null,
+          link_arquivo: null,
+          observacoes: `Gerado a partir de orçamento salvo · ${item.horas ?? '?'}h de impressão`,
           valor: item.valor,
           prazo: null,
           status: 'orcamento'
