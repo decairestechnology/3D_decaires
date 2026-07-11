@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Plus, ChevronLeft, ChevronRight, Trash2, Pencil, Link as LinkIcon, FileText } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Trash2, Pencil, Link as LinkIcon, FileText, Search } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Money, formatMoney } from '@/components/ui/Money'
 import { Modal } from '@/components/ui/Modal'
@@ -75,6 +75,15 @@ export function Pedidos() {
   const usandoMock = !loading && !!error
   const pedidos = usandoMock ? [] : data
 
+  const [busca, setBusca] = useState('')
+  const pedidosFiltrados = busca
+    ? pedidos.filter(p =>
+        p.peca.toLowerCase().includes(busca.toLowerCase()) ||
+        p.cliente_nome.toLowerCase().includes(busca.toLowerCase()) ||
+        String(p.numero).includes(busca)
+      )
+    : pedidos
+
   const clientesOptions = clientesApi
 
   function abrirNovo() {
@@ -106,7 +115,8 @@ export function Pedidos() {
       reload()
     } catch (err) {
       console.error('[Excluir pedido] erro:', err)
-      alert('Não deu pra excluir. Confere a conexão com o banco.')
+      const detalhe = err instanceof Error ? err.message : ''
+      alert(`Não deu pra excluir. ${detalhe.slice(0, 150) || 'Confere o console (F12) pra mais detalhe.'}`)
     }
   }
 
@@ -150,9 +160,19 @@ export function Pedidos() {
         <Button variant="gradient" onClick={abrirNovo}><Plus size={15} />Novo pedido</Button>
       </div>
 
+      <div className="relative mb-4 max-w-[320px]">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+        <input
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar por peça, cliente ou nº..."
+          className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--muted)] text-sm"
+        />
+      </div>
+
       <div className="flex gap-3.5 overflow-x-auto">
         {colunas.map(col => {
-          const items = pedidos.filter(p => p.status === col.status)
+          const items = pedidosFiltrados.filter(p => p.status === col.status)
           return (
             <div key={col.status} className="bg-[var(--muted)] rounded-xl p-3 min-w-[240px] flex-1">
               <div className="text-[13px] font-bold mb-2.5 flex justify-between text-[var(--muted-foreground)]">

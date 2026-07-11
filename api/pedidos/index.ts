@@ -42,6 +42,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'PATCH' && id) {
     const { status, valor, prazo, peca, material, cliente_id, material_id, peso_filamento_g, link_arquivo, observacoes } = req.body
 
+    const [antes] = await sql`SELECT status, material_debitado, material_id, peso_filamento_g FROM pedidos WHERE id = ${id}`
+
     const [atualizado] = await sql`
       UPDATE pedidos SET
         status = COALESCE(${status}, status), valor = COALESCE(${valor}, valor),
@@ -54,6 +56,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       WHERE id = ${id} RETURNING *
     `
     if (!atualizado) return res.status(404).json({ error: 'Pedido não encontrado' })
+
+    // Estorno: se o pedido volta pra "orçamento" e o material já tinha sido debitado, devolve pro estoque
+    if (status === 'orcamento' && antes?.material_debitado && antes.material_id && antes.peso_filamento_g) {
+      await sql`
+        UPDATE materiais SET estoque_g = estoque_g + ${antes.peso_filamento_g}
+        WHERE id = ${antes.material_id}
+      `
+      await sql`UPDATE pedidos SET material_debitado = false WHERE id = ${id}`
+    }
 
     // Automação 1: quando o pedido entra em produção, abate o material do estoque (só uma vez)
     if (status === 'producao' && !atualizado.material_debitado && atualizado.material_id && atualizado.peso_filamento_g) {

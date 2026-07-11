@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Send, Plus, Trash2, Save, PackageCheck, Pencil } from 'lucide-react'
+import { Send, Plus, Trash2, Save, PackageCheck, Pencil, ChevronDown } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -59,6 +59,14 @@ export function Orcamento() {
   const [editandoClienteDe, setEditandoClienteDe] = useState<string | null>(null)
   const [clienteSelecionadoEdicao, setClienteSelecionadoEdicao] = useState('')
   const [editandoOrcamentoId, setEditandoOrcamentoId] = useState<string | null>(null)
+  const [secaoAberta, setSecaoAberta] = useState(true)
+  const [filtroCliente, setFiltroCliente] = useState('')
+
+  const salvosFiltrados = useMemo(() => {
+    if (!filtroCliente) return salvosApi
+    if (filtroCliente === '__sem_cliente__') return salvosApi.filter(o => !o.cliente_id)
+    return salvosApi.filter(o => o.cliente_id === filtroCliente)
+  }, [salvosApi, filtroCliente])
 
   const clienteNome = clientesApi.find(c => c.id === clienteId)?.nome ?? ''
 
@@ -361,10 +369,26 @@ export function Orcamento() {
 
       {salvosApi.length > 0 && (
         <>
-          <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Orçamentos salvos</h2>
+          <div className="flex items-center justify-between mt-7 mb-3 flex-wrap gap-2">
+            <button onClick={() => setSecaoAberta(v => !v)} className="flex items-center gap-2 text-[1.05rem] font-semibold">
+              <ChevronDown size={18} className={`transition-transform ${secaoAberta ? '' : '-rotate-90'}`} />
+              Orçamentos salvos <span className="text-sm font-normal text-[var(--muted-foreground)]">({salvosFiltrados.length})</span>
+            </button>
+            {secaoAberta && (
+              <Select value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)} className="!mb-0 !w-auto min-w-[180px]">
+                <option value="">Todos os clientes</option>
+                {clientesApi.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                <option value="__sem_cliente__">Sem cliente</option>
+              </Select>
+            )}
+          </div>
+          {secaoAberta && (
           <Card className="p-0">
-            {salvosApi.map((o, i) => {
-              const last = i === salvosApi.length - 1
+            {salvosFiltrados.length === 0 ? (
+              <div className="text-center py-8 text-sm text-[var(--muted-foreground)]">Nenhum orçamento pra esse filtro.</div>
+            ) : (
+            salvosFiltrados.map((o, i) => {
+              const last = i === salvosFiltrados.length - 1
               const editando = editandoClienteDe === o.id
               return (
                 <div key={o.id} className={`flex items-center gap-3 px-4 py-3 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
@@ -421,8 +445,10 @@ export function Orcamento() {
                   )}
                 </div>
               )
-            })}
+            })
+            )}
           </Card>
+          )}
         </>
       )}
       </>

@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, Mail, MapPin, FileText, Phone } from 'lucide-react'
+import { Plus, Pencil, Trash2, Mail, MapPin, FileText, Phone, Search } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -68,6 +68,11 @@ export function Clientes() {
     ? clientesMock.map(c => ({ ...c, email: '', endereco: '', observacoes: '' }))
     : data.map(mapCliente)
 
+  const [busca, setBusca] = useState('')
+  const clientesFiltrados = busca
+    ? clientes.filter(c => c.nome.toLowerCase().includes(busca.toLowerCase()) || c.contato.toLowerCase().includes(busca.toLowerCase()))
+    : clientes
+
   function abrirNovo() { setForm(formVazio); setModalOpen(true) }
   function abrirEdicao(c: typeof clientes[number]) {
     setForm({
@@ -123,9 +128,21 @@ export function Clientes() {
         <Button variant="gradient" onClick={abrirNovo}><Plus size={15} />Novo cliente</Button>
       </div>
 
+      <div className="relative mb-4 max-w-[320px]">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+        <input
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar por nome ou contato..."
+          className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--muted)] text-sm"
+        />
+      </div>
+
       <Card className="p-0">
         {vazio ? (
           <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum cliente cadastrado ainda. Clica em "Novo cliente" pra começar.</div>
+        ) : clientesFiltrados.length === 0 ? (
+          <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum cliente encontrado pra "{busca}".</div>
         ) : (
         <table className="w-full border-collapse text-[13.5px]">
           <thead>
@@ -139,8 +156,8 @@ export function Clientes() {
             </tr>
           </thead>
           <tbody>
-            {clientes.map((c, i) => {
-              const last = i === clientes.length - 1
+            {clientesFiltrados.map((c, i) => {
+              const last = i === clientesFiltrados.length - 1
               return (
                 <tr key={c.id} onClick={() => setFichaAberta(c)} className="cursor-pointer hover:bg-[var(--muted)]">
                   <td className={`px-2.5 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>

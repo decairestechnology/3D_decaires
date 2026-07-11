@@ -419,12 +419,37 @@ export function Estoque() {
         }
       >
         <Label>Material</Label>
-        <Select value={formPerda.material_id} onChange={e => setFormPerda(f => ({ ...f, material_id: e.target.value }))}>
+        <Select
+          value={formPerda.material_id}
+          onChange={e => {
+            const materialId = e.target.value
+            const precoKg = materiais.find(m => m.id === materialId)?.precoKg ?? 0
+            const pesoG = Number(formPerda.peso_perdido_g.replace(',', '.')) || 0
+            const custoCalc = (pesoG / 1000) * precoKg
+            setFormPerda(f => ({ ...f, material_id: materialId, custo: custoCalc ? custoCalc.toFixed(2).replace('.', ',') : f.custo }))
+          }}
+        >
           {materiais.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
         </Select>
         <div className="grid grid-cols-2 gap-x-4">
-          <div><Label>Peso perdido (g)</Label><Input value={formPerda.peso_perdido_g} onChange={e => setFormPerda(f => ({ ...f, peso_perdido_g: e.target.value }))} /></div>
-          <div><Label>Custo (R$)</Label><Input placeholder="0,00" value={formPerda.custo} onChange={e => setFormPerda(f => ({ ...f, custo: e.target.value }))} /></div>
+          <div>
+            <Label>Peso perdido (g)</Label>
+            <Input
+              value={formPerda.peso_perdido_g}
+              onChange={e => {
+                const pesoStr = e.target.value
+                const precoKg = materiais.find(m => m.id === formPerda.material_id)?.precoKg ?? 0
+                const pesoG = Number(pesoStr.replace(',', '.')) || 0
+                const custoCalc = (pesoG / 1000) * precoKg
+                setFormPerda(f => ({ ...f, peso_perdido_g: pesoStr, custo: custoCalc ? custoCalc.toFixed(2).replace('.', ',') : f.custo }))
+              }}
+            />
+          </div>
+          <div>
+            <Label>Custo (R$)</Label>
+            <Input placeholder="0,00" value={formPerda.custo} onChange={e => setFormPerda(f => ({ ...f, custo: e.target.value }))} />
+            <div className="text-[11px] text-[var(--muted-foreground)] -mt-2">Calculado automático — pode ajustar se quiser.</div>
+          </div>
         </div>
         <Label>Motivo</Label>
         <Input placeholder="Ex: Descolou da mesa, warping..." value={formPerda.motivo} onChange={e => setFormPerda(f => ({ ...f, motivo: e.target.value }))} />
