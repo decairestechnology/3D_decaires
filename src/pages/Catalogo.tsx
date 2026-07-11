@@ -245,8 +245,10 @@ export function Catalogo() {
             <Input placeholder="0,00" value={form.preco_padrao} onChange={e => setForm(f => ({ ...f, preco_padrao: e.target.value }))} />
           </div>
         </div>
-        {form.material_id && (
+        {form.material_id ? (
           <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">Calculado com sua margem e custo de energia padrão (Configurações) — pode ajustar na mão.</div>
+        ) : (
+          <div className="text-[11px] text-amber-600 -mt-2 mb-3">Escolhe um material acima pra calcular o preço sugerido automaticamente.</div>
         )}
         <Label>Link da imagem (opcional)</Label>
         <Input placeholder="https://..." value={form.imagem_url} onChange={e => setForm(f => ({ ...f, imagem_url: e.target.value }))} />
