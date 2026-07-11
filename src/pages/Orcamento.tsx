@@ -61,6 +61,8 @@ export function Orcamento() {
   const [editandoOrcamentoId, setEditandoOrcamentoId] = useState<string | null>(null)
   const [secaoAberta, setSecaoAberta] = useState(true)
   const [filtroCliente, setFiltroCliente] = useState('')
+  const [limpando, setLimpando] = useState(false)
+  const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false)
 
   const salvosFiltrados = useMemo(() => {
     if (!filtroCliente) return salvosApi
@@ -246,6 +248,24 @@ export function Orcamento() {
     }
   }
 
+  async function limparConvertidos() {
+    const convertidos = salvosApi.filter(o => o.convertido)
+    if (convertidos.length === 0) return
+    setLimpando(true)
+    try {
+      for (const o of convertidos) {
+        await api.del(`/api/orcamentos?id=${o.id}`)
+      }
+      setConfirmandoLimpeza(false)
+      reloadSalvos()
+    } catch (err) {
+      console.error('[Limpar convertidos] erro:', err)
+      alert('Não deu pra limpar tudo. Confere o console (F12).')
+    } finally {
+      setLimpando(false)
+    }
+  }
+
   function abrirVincularCliente(orc: OrcamentoSalvoApiRow) {
     setEditandoClienteDe(orc.id)
     setClienteSelecionadoEdicao(orc.cliente_id ?? '')
@@ -375,11 +395,22 @@ export function Orcamento() {
               Orçamentos salvos <span className="text-sm font-normal text-[var(--muted-foreground)]">({salvosFiltrados.length})</span>
             </button>
             {secaoAberta && (
-              <Select value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)} className="!mb-0 !w-auto min-w-[180px]">
-                <option value="">Todos os clientes</option>
-                {clientesApi.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                <option value="__sem_cliente__">Sem cliente</option>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)} className="!mb-0 !w-auto min-w-[180px]">
+                  <option value="">Todos os clientes</option>
+                  {clientesApi.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  <option value="__sem_cliente__">Sem cliente</option>
+                </Select>
+                {salvosApi.some(o => o.convertido) && (
+                  confirmandoLimpeza ? (
+                    <InlineConfirm onCancel={() => setConfirmandoLimpeza(false)} onConfirm={limparConvertidos} />
+                  ) : (
+                    <Button variant="ghost" onClick={() => setConfirmandoLimpeza(true)} disabled={limpando}>
+                      <Trash2 size={14} />{limpando ? 'Limpando...' : 'Limpar convertidos'}
+                    </Button>
+                  )
+                )}
+              </div>
             )}
           </div>
           {secaoAberta && (
