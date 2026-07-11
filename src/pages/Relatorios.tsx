@@ -41,9 +41,9 @@ export function Relatorios() {
   const [analise, setAnalise] = useState('Peça pra Scout ler os números do período e apontar o que se destaca.')
   const [analisando, setAnalisando] = useState(false)
 
-  const [potencia, setPotencia] = useState('220')
-  const [horas, setHoras] = useState('96')
-  const [tarifa, setTarifa] = useState('0,76')
+  const [potencia, setPotencia] = useState('110')
+  const [horas, setHoras] = useState('0')
+  const [tarifa, setTarifa] = useState('0,0')
 
   const energia = useMemo(() => {
     const w = parseFloat(potencia.replace(',', '.')) || 0
