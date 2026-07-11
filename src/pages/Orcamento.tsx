@@ -424,10 +424,10 @@ export function Orcamento() {
                   <div><Label>Tempo de impressão (h)</Label><Input value={it.horas} onChange={e => atualizarItem(it.id, 'horas', e.target.value)} /></div>
                   <div><Label>Quantidade</Label><Input value={it.quantidade} onChange={e => atualizarItem(it.id, 'quantidade', e.target.value)} /></div>
                 </div>
-                <div className="flex justify-between flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)] bg-[var(--muted)] rounded-lg px-3 py-2 mt-1">
-                  <span>Custo/un.: {formatMoney((linha?.custoMaterial ?? 0) + (linha?.custoEnergia ?? 0))}</span>
+                <div className="flex justify-between flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)] bg-[var(--muted)] rounded-lg px-3 py-2 mt-1">                  
                   <span>Custo material: {formatMoney(linha?.custoMaterial ?? 0)}</span>
                   <span>Custo energia: {formatMoney(linha?.custoEnergia ?? 0)}</span>
+                  <span>Custo/un.: {formatMoney((linha?.custoMaterial ?? 0) + (linha?.custoEnergia ?? 0))}</span>
                   <span>Preço/un.: {formatMoney(linha?.precoUnitario ?? 0)}</span>
                   <span className="font-semibold text-emerald-600 dark:text-emerald-400">Lucro: {formatMoney(linha?.lucroLinha ?? 0)}</span>
                 </div>
