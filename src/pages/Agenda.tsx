@@ -9,7 +9,7 @@ import { Label, Input, Select } from '@/components/ui/Input'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { eventosAgenda as eventosMock } from '@/data/mockData'
-import { diaDoMes, formatarDataBR } from '@/lib/date'
+import { diaDoMes, formatarDataCurta } from '@/lib/date'
 
 const semanas = [
   [0, 0, 0, 1, 2, 3, 4],
@@ -25,6 +25,7 @@ type TipoEvento = 'entrega' | 'manutencao' | 'reuniao'
 interface EventoApiRow {
   id: string
   data: string
+  horario: string | null
   titulo: string
   descricao: string | null
   tipo: TipoEvento
@@ -36,7 +37,7 @@ const tipoInfo: Record<TipoEvento, { label: string; badge: 'cyan' | 'purple' | '
   reuniao: { label: 'Reunião', badge: 'amber', dot: 'bg-[#FFFBEB] text-[#92400E]', icon: Users }
 }
 
-const formVazio = { id: '', data: '', titulo: '', descricao: '', tipo: 'entrega' as TipoEvento }
+const formVazio = { id: '', data: '', horario: '', titulo: '', descricao: '', tipo: 'entrega' as TipoEvento }
 
 export function Agenda() {
   const { data, loading, error, reload } = useApi<EventoApiRow[]>('/api/agenda', [])
@@ -47,7 +48,9 @@ export function Agenda() {
 
   const usandoMock = !loading && !!error
   const vazio = !loading && !error && data.length === 0
-  const eventos = usandoMock ? eventosMock as (typeof eventosMock[number] & { tipo: TipoEvento })[] : data.map(e => ({ id: e.id, data: e.data, titulo: e.titulo, descricao: e.descricao ?? '', tipo: e.tipo }))
+  const eventos = usandoMock
+    ? eventosMock.map(e => ({ ...e, tipo: e.tipo as TipoEvento, horario: null as string | null }))
+    : data.map(e => ({ id: e.id, data: e.data, horario: e.horario, titulo: e.titulo, descricao: e.descricao ?? '', tipo: e.tipo }))
 
   function eventosNoDia(dia: number) {
     return eventos.filter(e => diaDoMes(e.data) === dia)
@@ -59,7 +62,7 @@ export function Agenda() {
   }
 
   function abrirEdicao(ev: typeof eventos[number]) {
-    setForm({ id: ev.id, data: ev.data.slice(0, 10), titulo: ev.titulo, descricao: ev.descricao, tipo: ev.tipo })
+    setForm({ id: ev.id, data: ev.data.slice(0, 10), horario: ev.horario ? ev.horario.slice(0, 5) : '', titulo: ev.titulo, descricao: ev.descricao, tipo: ev.tipo })
     setModalOpen(true)
   }
 
@@ -68,7 +71,7 @@ export function Agenda() {
     if (!form.titulo.trim() || !form.data) return
     setSalvando(true)
     try {
-      const payload = { data: form.data, titulo: form.titulo, descricao: form.descricao || null, tipo: form.tipo }
+      const payload = { data: form.data, titulo: form.titulo, descricao: form.descricao || null, tipo: form.tipo, horario: form.horario || null }
       if (form.id) await api.patch(`/api/agenda?id=${form.id}`, payload)
       else await api.post('/api/agenda', payload)
       setModalOpen(false)
@@ -124,8 +127,8 @@ export function Agenda() {
                 {dia}
                 <div className="flex flex-col gap-1 mt-1.5">
                   {evs.map(e => (
-                    <span key={e.id} className={`text-[10px] font-bold rounded px-1.5 py-0.5 truncate ${tipoInfo[e.tipo].dot}`}>
-                      {e.titulo.replace(/^(Entrega|Manutenção|Reunião) — /, '')}
+                    <span key={e.id} className={`text-[10px] font-bold rounded px-1.5 py-0.5 truncate ${tipoInfo[e.tipo].dot}`} title={e.horario ? e.horario.slice(0, 5) : ''}>
+                      {e.horario ? e.horario.slice(0, 5) + ' ' : ''}{e.titulo.replace(/^(Entrega|Manutenção|Reunião) — /, '')}
                     </span>
                   ))}
                 </div>
@@ -144,8 +147,9 @@ export function Agenda() {
           const Icon = info.icon
           return (
             <div key={e.id} className={`flex items-center gap-3 px-4 py-3 ${i < eventos.length - 1 ? 'border-b border-[var(--border)]' : ''}`}>
-              <div className="text-xs font-bold text-[var(--muted-foreground)] w-11 flex-shrink-0">
-                {formatarDataBR(e.data)}
+              <div className="text-xs font-bold text-[var(--muted-foreground)] w-14 flex-shrink-0 leading-tight">
+                {formatarDataCurta(e.data)}
+                {e.horario && <div className="text-[10px] font-semibold text-[var(--muted-foreground)] opacity-80">{e.horario.slice(0, 5)}</div>}
               </div>
               <div className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center flex-shrink-0 ${info.dot}`}>
                 <Icon size={16} />
@@ -189,8 +193,9 @@ export function Agenda() {
       >
         <Label>Título</Label>
         <Input placeholder="Ex: Entrega — Cliente X" value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} />
-        <div className="grid grid-cols-2 gap-x-4">
+        <div className="grid grid-cols-3 gap-x-4">
           <div><Label>Data</Label><Input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} /></div>
+          <div><Label>Horário</Label><Input type="time" value={form.horario} onChange={e => setForm(f => ({ ...f, horario: e.target.value }))} /></div>
           <div>
             <Label>Tipo</Label>
             <Select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value as TipoEvento }))}>

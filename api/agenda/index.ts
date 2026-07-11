@@ -18,26 +18,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const id = pegarId(req)
 
   if (req.method === 'GET') {
-    const eventos = await sql`SELECT * FROM agenda_eventos ORDER BY data`
+    const eventos = await sql`SELECT * FROM agenda_eventos ORDER BY data, horario NULLS LAST`
     return res.status(200).json(eventos)
   }
 
   if (req.method === 'POST') {
-    const { data, titulo, descricao, tipo, pedido_id, equipamento_id } = req.body
+    const { data, titulo, descricao, tipo, pedido_id, equipamento_id, horario } = req.body
     const [novo] = await sql`
-      INSERT INTO agenda_eventos (data, titulo, descricao, tipo, pedido_id, equipamento_id)
-      VALUES (${data}, ${titulo}, ${descricao}, ${tipo}, ${pedido_id ?? null}, ${equipamento_id ?? null})
+      INSERT INTO agenda_eventos (data, titulo, descricao, tipo, pedido_id, equipamento_id, horario)
+      VALUES (${data}, ${titulo}, ${descricao}, ${tipo}, ${pedido_id ?? null}, ${equipamento_id ?? null}, ${horario || null})
       RETURNING *
     `
     return res.status(201).json(novo)
   }
 
   if (req.method === 'PATCH' && id) {
-    const { data, titulo, descricao, tipo } = req.body
+    const { data, titulo, descricao, tipo, horario } = req.body
     const [atualizado] = await sql`
       UPDATE agenda_eventos SET
         data = COALESCE(${data}, data), titulo = COALESCE(${titulo}, titulo),
-        descricao = COALESCE(${descricao}, descricao), tipo = COALESCE(${tipo}, tipo)
+        descricao = COALESCE(${descricao}, descricao), tipo = COALESCE(${tipo}, tipo),
+        horario = COALESCE(${horario}, horario)
       WHERE id = ${id} RETURNING *
     `
     if (!atualizado) return res.status(404).json({ error: 'Compromisso não encontrado' })
