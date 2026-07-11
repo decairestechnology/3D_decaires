@@ -15,6 +15,9 @@ import { clientes as clientesMock } from '@/data/mockData'
 interface PedidoApiRow {
   id: string; numero?: number; cliente_id: string; peca: string; valor: string; prazo: string | null; status: string
 }
+interface OrcamentoApiRow {
+  id: string; cliente_id: string | null; itens: { nome: string }[]; valor_total: string; convertido: boolean; criado_em: string
+}
 
 const statusBadge: Record<string, { color: 'cyan' | 'amber' | 'green' | 'gray'; label: string }> = {
   producao: { color: 'cyan', label: 'Em produção' },
@@ -43,6 +46,7 @@ const formVazio = { id: '', nome: '', contato: '', email: '', endereco: '', obse
 export function Clientes() {
   const { data, loading, error, reload } = useApi<ClienteApiRow[]>('/api/clientes', [])
   const { data: pedidosApi } = useApi<PedidoApiRow[]>('/api/pedidos', [])
+  const { data: orcamentosApi } = useApi<OrcamentoApiRow[]>('/api/orcamentos', [])
   const [modalOpen, setModalOpen] = useState(false)
   const [fichaAberta, setFichaAberta] = useState<ReturnType<typeof mapCliente> | null>(null)
   const [salvando, setSalvando] = useState(false)
@@ -181,10 +185,14 @@ export function Clientes() {
       >
         {fichaAberta && (
           <div>
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="bg-[var(--muted)] rounded-lg p-3">
                 <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Pedidos</div>
                 <div className="text-lg font-extrabold">{fichaAberta.pedidos}</div>
+              </div>
+              <div className="bg-[var(--muted)] rounded-lg p-3">
+                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Orçamentos</div>
+                <div className="text-lg font-extrabold">{orcamentosApi.filter(o => o.cliente_id === fichaAberta.id).length}</div>
               </div>
               <div className="bg-[var(--muted)] rounded-lg p-3">
                 <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Total gasto</div>
@@ -203,7 +211,7 @@ export function Clientes() {
             {pedidosApi.filter(p => p.cliente_id === fichaAberta.id).length === 0 ? (
               <div className="text-sm text-[var(--muted-foreground)] py-3 text-center bg-[var(--muted)] rounded-lg">Nenhum pedido ainda.</div>
             ) : (
-              <div className="flex flex-col gap-2 max-h-[260px] overflow-y-auto">
+              <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto">
                 {pedidosApi.filter(p => p.cliente_id === fichaAberta.id).map(p => (
                   <div key={p.id} className="flex items-center justify-between bg-[var(--muted)] rounded-lg px-3 py-2 text-[13px]">
                     <div>
@@ -214,6 +222,26 @@ export function Clientes() {
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">{formatMoney(Number(p.valor))}</span>
                       <Badge color={statusBadge[p.status]?.color ?? 'gray'}>{statusBadge[p.status]?.label ?? p.status}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="text-xs font-bold text-[var(--muted-foreground)] mb-2 mt-4">HISTÓRICO DE ORÇAMENTOS</div>
+            {orcamentosApi.filter(o => o.cliente_id === fichaAberta.id).length === 0 ? (
+              <div className="text-sm text-[var(--muted-foreground)] py-3 text-center bg-[var(--muted)] rounded-lg">Nenhum orçamento ainda.</div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto">
+                {orcamentosApi.filter(o => o.cliente_id === fichaAberta.id).map(o => (
+                  <div key={o.id} className="flex items-center justify-between bg-[var(--muted)] rounded-lg px-3 py-2 text-[13px]">
+                    <div>
+                      {o.itens.map(it => it.nome).join(', ')}
+                      <div className="text-xs text-[var(--muted-foreground)]">{formatarDataBR(o.criado_em)}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{formatMoney(Number(o.valor_total))}</span>
+                      <Badge color={o.convertido ? 'green' : 'amber'}>{o.convertido ? 'Virou pedido' : 'Em aberto'}</Badge>
                     </div>
                   </div>
                 ))}

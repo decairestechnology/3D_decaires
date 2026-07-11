@@ -15,7 +15,6 @@ import { materiais as materiaisMock, produtosProntos as produtosMock } from '@/d
 interface MaterialApiRow { id: string; nome: string; preco_kg: string; estoque_g: string; capacidade_g: string }
 interface ProdutoApiRow { id: string; nome: string; material: string | null; quantidade: number; custo_unitario: string; preco_venda: string }
 interface PerdaApiRow { id: string; peso_perdido_g: string; motivo: string | null; custo: string | null; data: string; material_id: string | null; material_nome: string | null }
-interface OpcaoApiRow { id: string; categoria: 'tipo' | 'cor'; nome: string }
 
 function statusMaterial(pct: number): { color: 'red' | 'amber' | 'green'; label: string; bar: string } {
   if (pct <= 25) return { color: 'red', label: 'Baixo', bar: 'var(--destructive)' }
@@ -40,16 +39,6 @@ export function Estoque() {
   const { data: matApi, loading: matLoading, error: matError, reload: reloadMat } = useApi<MaterialApiRow[]>('/api/materiais', [])
   const { data: prodApi, loading: prodLoading, error: prodError, reload: reloadProd } = useApi<ProdutoApiRow[]>('/api/produtos-prontos', [])
   const { data: perdasApi, loading: perdasLoading, error: perdasError, reload: reloadPerdas } = useApi<PerdaApiRow[]>('/api/perdas', [])
-  const { data: opcoesApi } = useApi<OpcaoApiRow[]>('/api/opcoes-material', [])
-  const tiposOpcoes = opcoesApi.filter(o => o.categoria === 'tipo')
-  const coresOpcoes = opcoesApi.filter(o => o.categoria === 'cor')
-  const [tipoSelecionado, setTipoSelecionado] = useState('')
-  const [corSelecionada, setCorSelecionada] = useState('')
-
-  function montarNomeMaterial(tipo: string, cor: string) {
-    const nome = [tipo, cor].filter(Boolean).join(' ')
-    if (nome) setFormMaterial(f => ({ ...f, nome }))
-  }
 
   const matMock = !matLoading && !!matError
   const matVazio = !matLoading && !matError && matApi.length === 0
@@ -75,7 +64,7 @@ export function Estoque() {
   const baixos = materiais.filter(m => (m.estoqueG / m.capacidadeG) * 100 <= 25)
 
   function abrirNovo() {
-    if (aba === 'materia') { setFormMaterial(formMaterialVazio); setTipoSelecionado(''); setCorSelecionada('') }
+    if (aba === 'materia') setFormMaterial(formMaterialVazio)
     else setFormProduto(formProdutoVazio)
     setModalOpen(true)
   }
@@ -388,24 +377,6 @@ export function Estoque() {
       >
         {aba === 'materia' ? (
           <>
-            {(tiposOpcoes.length > 0 || coresOpcoes.length > 0) && (
-              <div className="grid grid-cols-2 gap-x-4">
-                <div>
-                  <Label>Tipo</Label>
-                  <Select value={tipoSelecionado} onChange={e => { setTipoSelecionado(e.target.value); montarNomeMaterial(e.target.value, corSelecionada) }}>
-                    <option value="">Selecione...</option>
-                    {tiposOpcoes.map(t => <option key={t.id} value={t.nome}>{t.nome}</option>)}
-                  </Select>
-                </div>
-                <div>
-                  <Label>Cor</Label>
-                  <Select value={corSelecionada} onChange={e => { setCorSelecionada(e.target.value); montarNomeMaterial(tipoSelecionado, e.target.value) }}>
-                    <option value="">Selecione...</option>
-                    {coresOpcoes.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-                  </Select>
-                </div>
-              </div>
-            )}
             <Label>Nome do material</Label>
             <Input placeholder="Ex: PLA Azul" value={formMaterial.nome} onChange={e => setFormMaterial(f => ({ ...f, nome: e.target.value }))} />
             <Label>Preço por kg (R$)</Label>

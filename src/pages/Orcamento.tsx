@@ -289,7 +289,6 @@ export function Orcamento() {
                 <div className="flex justify-between items-center mb-2">
                   <b className="text-sm">Peça {idx + 1}</b>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-[var(--muted-foreground)]">un.: {formatMoney(linha?.precoUnitario ?? 0)}</span>
                     <span className="text-sm font-bold text-[var(--secondary)]">{formatMoney(linha?.precoLinha ?? 0)}</span>
                     {itens.length > 1 && (
                       <button onClick={() => removerItem(it.id)} className="text-[var(--muted-foreground)] hover:text-red-600">
@@ -314,6 +313,7 @@ export function Orcamento() {
                   <div><Label>Quantidade</Label><Input value={it.quantidade} onChange={e => atualizarItem(it.id, 'quantidade', e.target.value)} /></div>
                 </div>
                 <div className="flex justify-between flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)] bg-[var(--muted)] rounded-lg px-3 py-2 mt-1">
+                  <span>Custo/un.: {formatMoney((linha?.custoMaterial ?? 0) + (linha?.custoEnergia ?? 0))}</span>
                   <span>Custo material: {formatMoney(linha?.custoMaterial ?? 0)}</span>
                   <span>Custo energia: {formatMoney(linha?.custoEnergia ?? 0)}</span>
                   <span>Preço/un.: {formatMoney(linha?.precoUnitario ?? 0)}</span>
