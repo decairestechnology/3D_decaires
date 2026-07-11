@@ -17,7 +17,7 @@ interface ProdutoApiRow { id: string; nome: string; material: string | null; qua
 interface PerdaApiRow { id: string; peso_perdido_g: string; motivo: string | null; custo: string | null; data: string; material_id: string | null; material_nome: string | null }
 
 function statusMaterial(pct: number): { color: 'red' | 'amber' | 'green'; label: string; bar: string } {
-  if (pct <= 20) return { color: 'red', label: 'Baixo', bar: 'var(--destructive)' }
+  if (pct <= 25) return { color: 'red', label: 'Baixo', bar: 'var(--destructive)' }
   if (pct <= 50) return { color: 'amber', label: 'Médio', bar: '#F59E0B' }
   return { color: 'green', label: 'OK', bar: '#10B981' }
 }
@@ -61,7 +61,7 @@ export function Estoque() {
       ]
     : perdasApi.map(p => ({ id: p.id, data: p.data, materialId: p.material_id ?? '', material: p.material_nome ?? '—', peso: Number(p.peso_perdido_g), motivo: p.motivo ?? '—', custo: Number(p.custo ?? 0) }))
 
-  const baixos = materiais.filter(m => (m.estoqueG / m.capacidadeG) * 100 <= 20)
+  const baixos = materiais.filter(m => (m.estoqueG / m.capacidadeG) * 100 <= 25)
 
   function abrirNovo() {
     if (aba === 'materia') setFormMaterial(formMaterialVazio)

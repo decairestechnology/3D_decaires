@@ -56,7 +56,7 @@ export function Dashboard() {
   const lucro = faturamento - despesas
   const margem = faturamento > 0 ? Math.round((lucro / faturamento) * 100) : 0
 
-  const materiaisBaixos = matData.filter(m => (Number(m.estoque_g) / Number(m.capacidade_g)) * 100 <= 20)
+  const materiaisBaixos = matData.filter(m => (Number(m.estoque_g) / Number(m.capacidade_g)) * 100 <= 25)
 
   const prazos = pedidosAtivos
     .filter((p): p is typeof p & { prazo: string } => !!p.prazo)
