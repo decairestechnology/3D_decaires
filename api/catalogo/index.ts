@@ -36,8 +36,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         RETURNING *
       `
       return res.status(201).json(novo)
-    } catch {
-      return res.status(409).json({ error: 'Esse código já existe no catálogo' })
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[catalogo] erro ao inserir:', err)
+      const msg = err instanceof Error ? err.message : 'erro desconhecido'
+      return res.status(409).json({ error: msg })
     }
   }
 

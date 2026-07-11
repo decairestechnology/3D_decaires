@@ -86,7 +86,8 @@ export function Catalogo() {
       reload()
     } catch (err) {
       console.error('[Salvar] erro:', err)
-      alert('Não deu pra salvar — o código pode já existir, ou confere a conexão com o banco.')
+      const detalhe = err instanceof Error ? err.message : ''
+      alert(`Não deu pra salvar. ${detalhe.slice(0, 200) || 'Confere o console (F12) pra mais detalhe.'}`)
     } finally {
       setSalvando(false)
     }
