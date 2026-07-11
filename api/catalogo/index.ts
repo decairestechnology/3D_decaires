@@ -28,11 +28,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, imagem_url, link_arquivo, categoria } = req.body
+    const { codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, imagem_url, link_arquivo, categoria, materiais_padrao } = req.body
     try {
+      const lista = materiais_padrao ?? []
+      const primeiro = lista[0]
       const [novo] = await sql`
-        INSERT INTO catalogo_produtos (codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, imagem_url, link_arquivo, categoria)
-        VALUES (${codigo}, ${nome}, ${material_id ?? null}, ${peso_padrao_g ?? null}, ${tempo_impressao_h ?? null}, ${preco_padrao ?? null}, ${descricao ?? null}, ${imagem_url ?? null}, ${link_arquivo ?? null}, ${categoria ?? null})
+        INSERT INTO catalogo_produtos (codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, imagem_url, link_arquivo, categoria, materiais_padrao)
+        VALUES (${codigo}, ${nome}, ${primeiro?.material_id ?? material_id ?? null}, ${primeiro?.peso_g ?? peso_padrao_g ?? null}, ${tempo_impressao_h ?? null}, ${preco_padrao ?? null}, ${descricao ?? null}, ${imagem_url ?? null}, ${link_arquivo ?? null}, ${categoria ?? null}, ${JSON.stringify(lista)})
         RETURNING *
       `
       return res.status(201).json(novo)
@@ -45,15 +47,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PATCH' && id) {
-    const { codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, ativo, imagem_url, link_arquivo, categoria } = req.body
+    const { codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, ativo, imagem_url, link_arquivo, categoria, materiais_padrao } = req.body
+    const primeiro = materiais_padrao?.[0]
     const [atualizado] = await sql`
       UPDATE catalogo_produtos SET
         codigo = COALESCE(${codigo}, codigo), nome = COALESCE(${nome}, nome),
-        material_id = COALESCE(${material_id}, material_id), peso_padrao_g = COALESCE(${peso_padrao_g}, peso_padrao_g),
+        material_id = COALESCE(${primeiro?.material_id ?? material_id}, material_id),
+        peso_padrao_g = COALESCE(${primeiro?.peso_g ?? peso_padrao_g}, peso_padrao_g),
         tempo_impressao_h = COALESCE(${tempo_impressao_h}, tempo_impressao_h),
         preco_padrao = COALESCE(${preco_padrao}, preco_padrao), descricao = COALESCE(${descricao}, descricao),
         ativo = COALESCE(${ativo}, ativo), imagem_url = COALESCE(${imagem_url}, imagem_url),
-        link_arquivo = COALESCE(${link_arquivo}, link_arquivo), categoria = COALESCE(${categoria}, categoria)
+        link_arquivo = COALESCE(${link_arquivo}, link_arquivo), categoria = COALESCE(${categoria}, categoria),
+        materiais_padrao = COALESCE(${materiais_padrao ? JSON.stringify(materiais_padrao) : null}, materiais_padrao)
       WHERE id = ${id} RETURNING *
     `
     if (!atualizado) return res.status(404).json({ error: 'Produto não encontrado' })

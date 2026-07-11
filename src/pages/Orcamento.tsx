@@ -16,6 +16,7 @@ interface MaterialApiRow { id: string; nome: string; preco_kg: string }
 interface CatalogoApiRow {
   id: string; codigo: string; nome: string; material_id: string | null
   peso_padrao_g: string | null; tempo_impressao_h: string | null; ativo: boolean
+  materiais_padrao: { material_id: string; peso_g: number }[] | null
 }
 interface ClienteApiRow { id: string; nome: string }
 
@@ -375,7 +376,11 @@ export function Orcamento() {
                           ...x,
                           nome: prod.nome,
                           horas: prod.tempo_impressao_h ?? x.horas,
-                          materiais: prod.material_id ? [{ id: crypto.randomUUID(), materialId: prod.material_id, peso: prod.peso_padrao_g ?? '80' }] : x.materiais
+                          materiais: prod.materiais_padrao && prod.materiais_padrao.length > 0
+                            ? prod.materiais_padrao.map(m => ({ id: crypto.randomUUID(), materialId: m.material_id, peso: String(m.peso_g) }))
+                            : prod.material_id
+                              ? [{ id: crypto.randomUUID(), materialId: prod.material_id, peso: prod.peso_padrao_g ?? '80' }]
+                              : x.materiais
                         } : x))
                       }}
                     >
@@ -420,9 +425,9 @@ export function Orcamento() {
                   <div><Label>Quantidade</Label><Input value={it.quantidade} onChange={e => atualizarItem(it.id, 'quantidade', e.target.value)} /></div>
                 </div>
                 <div className="flex justify-between flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)] bg-[var(--muted)] rounded-lg px-3 py-2 mt-1">
+                  <span>Custo/un.: {formatMoney((linha?.custoMaterial ?? 0) + (linha?.custoEnergia ?? 0))}</span>
                   <span>Custo material: {formatMoney(linha?.custoMaterial ?? 0)}</span>
                   <span>Custo energia: {formatMoney(linha?.custoEnergia ?? 0)}</span>
-                  <span>Custo/un.: {formatMoney((linha?.custoMaterial ?? 0) + (linha?.custoEnergia ?? 0))}</span>
                   <span>Preço/un.: {formatMoney(linha?.precoUnitario ?? 0)}</span>
                   <span className="font-semibold text-emerald-600 dark:text-emerald-400">Lucro: {formatMoney(linha?.lucroLinha ?? 0)}</span>
                 </div>

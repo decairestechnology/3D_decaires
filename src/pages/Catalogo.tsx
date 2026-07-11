@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, Tag, RefreshCw, ImageOff, Link as LinkIcon, X, Search, Copy, ArrowUpDown, TrendingUp } from 'lucide-react'
+import { Plus, Pencil, Trash2, Tag, RefreshCw, ImageOff, Link as LinkIcon, X, Search, Copy, TrendingUp } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -10,15 +10,31 @@ import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { carregarPreferencias } from '@/lib/settings'
 
+interface MaterialPadrao { material_id: string; peso_g: number }
 interface ProdutoApiRow {
   id: string; codigo: string; nome: string; material_id: string | null; material_nome: string | null
   peso_padrao_g: string | null; tempo_impressao_h: string | null; preco_padrao: string | null
-  descricao: string | null; ativo: boolean; imagem_url: string | null; link_arquivo: string | null; categoria: string | null
+  descricao: string | null; ativo: boolean; imagem_url: string | null; link_arquivo: string | null
+  categoria: string | null; materiais_padrao: MaterialPadrao[] | null
 }
 interface MaterialApiRow { id: string; nome: string; preco_kg: string }
 interface PedidoApiRow { catalogo_produto_id: string | null }
 
-const formVazio = { id: '', codigo: '', nome: '', material_id: '', peso_padrao_g: '', tempo_impressao_h: '', preco_padrao: '', descricao: '', imagem_url: '', link_arquivo: '', categoria: '' }
+interface LinhaMaterial { id: string; material_id: string; peso_g: string }
+function novaLinhaMaterial(): LinhaMaterial { return { id: crypto.randomUUID(), material_id: '', peso_g: '' } }
+
+const formVazio = { id: '', codigo: '', nome: '', tempo_impressao_h: '', preco_padrao: '', descricao: '', imagem_url: '', link_arquivo: '', categoria: '' }
+
+// pega materiais de um produto do catálogo (novo formato lista, ou o antigo de 1 material só)
+function materiaisDoProduto(p: ProdutoApiRow): LinhaMaterial[] {
+  if (p.materiais_padrao && p.materiais_padrao.length > 0) {
+    return p.materiais_padrao.map(m => ({ id: crypto.randomUUID(), material_id: m.material_id, peso_g: String(m.peso_g) }))
+  }
+  if (p.material_id && p.peso_padrao_g) {
+    return [{ id: crypto.randomUUID(), material_id: p.material_id, peso_g: p.peso_padrao_g }]
+  }
+  return []
+}
 
 export function Catalogo() {
   const { data, loading, error, reload } = useApi<ProdutoApiRow[]>('/api/catalogo', [])
@@ -28,6 +44,7 @@ export function Catalogo() {
   const [salvando, setSalvando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
+  const [materiaisLinhas, setMateriaisLinhas] = useState<LinhaMaterial[]>([novaLinhaMaterial()])
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
   const [fichaAberta, setFichaAberta] = useState<ProdutoApiRow | null>(null)
   const [busca, setBusca] = useState('')
@@ -42,6 +59,10 @@ export function Catalogo() {
     return pedidosApi.filter(p => p.catalogo_produto_id === produtoId).length
   }
 
+  function nomesMateriais(p: ProdutoApiRow) {
+    return materiaisDoProduto(p).map(l => materiaisApi.find(m => m.id === l.material_id)?.nome).filter(Boolean).join(' + ') || p.material_nome || '—'
+  }
+
   const categorias = Array.from(new Set(produtos.map(p => p.categoria).filter((c): c is string => !!c))).sort()
 
   const produtosFiltrados = produtos
@@ -52,7 +73,7 @@ export function Catalogo() {
       if (ordenacao === 'preco_asc') return Number(a.preco_padrao ?? 0) - Number(b.preco_padrao ?? 0)
       if (ordenacao === 'preco_desc') return Number(b.preco_padrao ?? 0) - Number(a.preco_padrao ?? 0)
       if (ordenacao === 'nome') return a.nome.localeCompare(b.nome)
-      return 0 // 'recente' já vem assim da API (ORDER BY criado_em DESC não é o padrão atual, mas ORDER BY codigo — deixa como veio)
+      return 0
     })
 
   function gerarProximoCodigo() {
@@ -64,40 +85,66 @@ export function Catalogo() {
     return `PRD-${String(proximo).padStart(3, '0')}`
   }
 
-  function calcularPrecoSugerido(materialId: string, pesoStr: string, horasStr: string) {
-    const material = materiaisApi.find(m => m.id === materialId)
-    if (!material) return null
+  function calcularPrecoSugerido(linhas: LinhaMaterial[], horasStr: string) {
     const prefs = carregarPreferencias()
-    const precoKg = Number(material.preco_kg)
-    const pesoG = Number(pesoStr.replace(',', '.')) || 0
-    const horas = Number(horasStr.replace(',', '.')) || 0
     const custoEnergiaHora = Number(prefs.custoEnergiaPadrao.replace(',', '.')) || 0
     const margem = Number(prefs.margemPadrao.replace(',', '.')) || 0
-    const custoMaterial = (pesoG / 1000) * precoKg
+    const custoMaterial = linhas.reduce((s, l) => {
+      const material = materiaisApi.find(m => m.id === l.material_id)
+      if (!material) return s
+      const precoKg = Number(material.preco_kg)
+      const pesoG = Number(l.peso_g.replace(',', '.')) || 0
+      return s + (pesoG / 1000) * precoKg
+    }, 0)
+    if (custoMaterial === 0) return null
+    const horas = Number(horasStr.replace(',', '.')) || 0
     const custoEnergia = horas * custoEnergiaHora
     const preco = (custoMaterial + custoEnergia) * (1 + margem / 100)
     return preco > 0 ? preco : null
   }
 
-  function abrirNovo() { setForm({ ...formVazio, codigo: gerarProximoCodigo() }); setModalOpen(true) }
+  function recalcularPreco(linhas: LinhaMaterial[], horas: string) {
+    const sugerido = calcularPrecoSugerido(linhas, horas)
+    if (sugerido) setForm(f => ({ ...f, preco_padrao: sugerido.toFixed(2).replace('.', ',') }))
+  }
+
+  function abrirNovo() {
+    setForm({ ...formVazio, codigo: gerarProximoCodigo() })
+    setMateriaisLinhas([novaLinhaMaterial()])
+    setModalOpen(true)
+  }
   function abrirDuplicado(p: ProdutoApiRow) {
     setForm({
-      id: '', codigo: gerarProximoCodigo(), nome: `${p.nome} (cópia)`, material_id: p.material_id ?? '',
-      peso_padrao_g: p.peso_padrao_g ?? '', tempo_impressao_h: p.tempo_impressao_h ?? '',
+      id: '', codigo: gerarProximoCodigo(), nome: `${p.nome} (cópia)`,
+      tempo_impressao_h: p.tempo_impressao_h ?? '',
       preco_padrao: p.preco_padrao ? String(p.preco_padrao).replace('.', ',') : '', descricao: p.descricao ?? '',
       imagem_url: p.imagem_url ?? '', link_arquivo: p.link_arquivo ?? '', categoria: p.categoria ?? ''
     })
+    const linhas = materiaisDoProduto(p)
+    setMateriaisLinhas(linhas.length > 0 ? linhas.map(l => ({ ...l, id: crypto.randomUUID() })) : [novaLinhaMaterial()])
     setModalOpen(true)
   }
   function abrirEdicao(p: ProdutoApiRow) {
     setFichaAberta(null)
     setForm({
-      id: p.id, codigo: p.codigo, nome: p.nome, material_id: p.material_id ?? '',
-      peso_padrao_g: p.peso_padrao_g ?? '', tempo_impressao_h: p.tempo_impressao_h ?? '',
+      id: p.id, codigo: p.codigo, nome: p.nome, tempo_impressao_h: p.tempo_impressao_h ?? '',
       preco_padrao: p.preco_padrao ? String(p.preco_padrao).replace('.', ',') : '', descricao: p.descricao ?? '',
       imagem_url: p.imagem_url ?? '', link_arquivo: p.link_arquivo ?? '', categoria: p.categoria ?? ''
     })
+    const linhas = materiaisDoProduto(p)
+    setMateriaisLinhas(linhas.length > 0 ? linhas : [novaLinhaMaterial()])
     setModalOpen(true)
+  }
+
+  function atualizarLinha(id: string, campo: keyof LinhaMaterial, valor: string) {
+    setMateriaisLinhas(lista => {
+      const nova = lista.map(l => (l.id === id ? { ...l, [campo]: valor } : l))
+      recalcularPreco(nova, form.tempo_impressao_h)
+      return nova
+    })
+  }
+  function removerLinha(id: string) {
+    setMateriaisLinhas(lista => (lista.length > 1 ? lista.filter(l => l.id !== id) : lista))
   }
 
   async function handleSalvar(e: FormEvent) {
@@ -105,9 +152,11 @@ export function Catalogo() {
     if (!form.codigo.trim() || !form.nome.trim()) return
     setSalvando(true)
     try {
+      const linhasValidas = materiaisLinhas.filter(l => l.material_id && l.peso_g)
+      const materiaisPadrao = linhasValidas.map(l => ({ material_id: l.material_id, peso_g: Number(l.peso_g) }))
       const payload = {
-        codigo: form.codigo.trim().toUpperCase(), nome: form.nome, material_id: form.material_id || null,
-        peso_padrao_g: form.peso_padrao_g ? Number(form.peso_padrao_g) : null,
+        codigo: form.codigo.trim().toUpperCase(), nome: form.nome,
+        materiais_padrao: materiaisPadrao,
         tempo_impressao_h: form.tempo_impressao_h ? Number(form.tempo_impressao_h.replace(',', '.')) : null,
         preco_padrao: form.preco_padrao ? Number(form.preco_padrao.replace(',', '.')) : null,
         descricao: form.descricao || null, imagem_url: form.imagem_url || null, link_arquivo: form.link_arquivo || null,
@@ -117,6 +166,7 @@ export function Catalogo() {
       else await api.post('/api/catalogo', payload)
       setModalOpen(false)
       setForm(formVazio)
+      setMateriaisLinhas([novaLinhaMaterial()])
       reload()
     } catch (err) {
       console.error('[Salvar] erro:', err)
@@ -179,8 +229,7 @@ export function Catalogo() {
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]"></th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Código</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Nome</th>
-                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Material</th>
-                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Peso</th>
+                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Materiais</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Preço padrão</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Vendidos</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]"></th>
@@ -212,8 +261,7 @@ export function Catalogo() {
                         {p.link_arquivo && <LinkIcon size={11} className="text-[var(--muted-foreground)]" />}
                       </button>
                     </td>
-                    <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.material_nome ?? '—'}</td>
-                    <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.peso_padrao_g ? `${p.peso_padrao_g}g` : '—'}</td>
+                    <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{nomesMateriais(p)}</td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.preco_padrao ? formatMoney(Number(p.preco_padrao)) : '—'}</td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
                       {contagemUso(p.id) > 0 ? (
@@ -271,18 +319,25 @@ export function Catalogo() {
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><TrendingUp size={12} />vendido {contagemUso(fichaAberta.id)}x</span>
               )}
             </div>
+            <div>
+              <div className="text-[11px] font-semibold text-[var(--muted-foreground)] mb-1">Materiais</div>
+              {materiaisDoProduto(fichaAberta).length === 0 ? (
+                <div className="text-sm">—</div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {materiaisDoProduto(fichaAberta).map(l => (
+                    <div key={l.id} className="flex justify-between bg-[var(--muted)] rounded px-2.5 py-1.5 text-[13px]">
+                      <span>{materiaisApi.find(m => m.id === l.material_id)?.nome ?? '—'}</span>
+                      <span className="text-[var(--muted-foreground)]">{l.peso_g}g</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="bg-[var(--muted)] rounded-lg p-3">
-                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Material</div>
-                <div className="font-bold mt-0.5">{fichaAberta.material_nome ?? '—'}</div>
-              </div>
               <div className="bg-[var(--muted)] rounded-lg p-3">
                 <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Preço padrão</div>
                 <div className="font-bold mt-0.5">{fichaAberta.preco_padrao ? formatMoney(Number(fichaAberta.preco_padrao)) : '—'}</div>
-              </div>
-              <div className="bg-[var(--muted)] rounded-lg p-3">
-                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Peso padrão</div>
-                <div className="font-bold mt-0.5">{fichaAberta.peso_padrao_g ? `${fichaAberta.peso_padrao_g}g` : '—'}</div>
               </div>
               <div className="bg-[var(--muted)] rounded-lg p-3">
                 <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Tempo de impressão</div>
@@ -332,40 +387,44 @@ export function Catalogo() {
         </div>
         <Label>Categoria (opcional)</Label>
         <Input placeholder="Ex: Vaso, Chaveiro, Suporte..." value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} />
-        <Label>Material padrão</Label>
-        <Select
-          value={form.material_id}
-          onChange={e => {
-            const materialId = e.target.value
-            const sugerido = calcularPrecoSugerido(materialId, form.peso_padrao_g, form.tempo_impressao_h)
-            setForm(f => ({ ...f, material_id: materialId, preco_padrao: sugerido ? sugerido.toFixed(2).replace('.', ',') : f.preco_padrao }))
-          }}
+
+        <Label>Materiais (uma linha por cor/filamento)</Label>
+        <div className="flex flex-col gap-2 mb-3">
+          {materiaisLinhas.map(l => (
+            <div key={l.id} className="grid grid-cols-[1fr_90px_28px] gap-2 items-start">
+              <Select value={l.material_id} onChange={e => atualizarLinha(l.id, 'material_id', e.target.value)} className="!mb-0">
+                <option value="">Selecione o material...</option>
+                {materiaisApi.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+              </Select>
+              <Input placeholder="Peso (g)" value={l.peso_g} onChange={e => atualizarLinha(l.id, 'peso_g', e.target.value)} className="!mb-0" />
+              <button
+                type="button"
+                onClick={() => removerLinha(l.id)}
+                disabled={materiaisLinhas.length === 1}
+                className="w-7 h-9 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:text-red-600 disabled:opacity-20"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => setMateriaisLinhas(l => [...l, novaLinhaMaterial()])}
+          className="text-xs font-semibold text-[var(--primary)] flex items-center gap-1 mb-3 -mt-1"
         >
-          <option value="">Nenhum (escolhe na hora do pedido)</option>
-          {materiaisApi.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
-        </Select>
-        <div className="grid grid-cols-3 gap-x-4">
-          <div>
-            <Label>Peso padrão (g)</Label>
-            <Input
-              placeholder="80"
-              value={form.peso_padrao_g}
-              onChange={e => {
-                const peso = e.target.value
-                const sugerido = calcularPrecoSugerido(form.material_id, peso, form.tempo_impressao_h)
-                setForm(f => ({ ...f, peso_padrao_g: peso, preco_padrao: sugerido ? sugerido.toFixed(2).replace('.', ',') : f.preco_padrao }))
-              }}
-            />
-          </div>
+          <Plus size={13} />Adicionar outro material/cor
+        </button>
+
+        <div className="grid grid-cols-2 gap-x-4">
           <div>
             <Label>Tempo impressão (h)</Label>
             <Input
               placeholder="6"
               value={form.tempo_impressao_h}
               onChange={e => {
-                const horas = e.target.value
-                const sugerido = calcularPrecoSugerido(form.material_id, form.peso_padrao_g, horas)
-                setForm(f => ({ ...f, tempo_impressao_h: horas, preco_padrao: sugerido ? sugerido.toFixed(2).replace('.', ',') : f.preco_padrao }))
+                setForm(f => ({ ...f, tempo_impressao_h: e.target.value }))
+                recalcularPreco(materiaisLinhas, e.target.value)
               }}
             />
           </div>
@@ -374,7 +433,7 @@ export function Catalogo() {
             <Input placeholder="0,00" value={form.preco_padrao} onChange={e => setForm(f => ({ ...f, preco_padrao: e.target.value }))} />
           </div>
         </div>
-        {form.material_id ? (
+        {materiaisLinhas.some(l => l.material_id) ? (
           <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">Calculado com sua margem e custo de energia padrão (Configurações) — pode ajustar na mão.</div>
         ) : (
           <div className="text-[11px] text-amber-600 -mt-2 mb-3">Escolhe um material acima pra calcular o preço sugerido automaticamente.</div>

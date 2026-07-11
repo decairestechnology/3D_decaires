@@ -53,6 +53,7 @@ interface MaterialApiRow { id: string; nome: string }
 interface CatalogoApiRow {
   id: string; codigo: string; nome: string; material_id: string | null
   peso_padrao_g: string | null; preco_padrao: string | null; ativo: boolean
+  materiais_padrao: { material_id: string; peso_g: number }[] | null
 }
 
 interface LinhaMaterial { id: string; material_id: string; peso_g: string }
@@ -355,7 +356,9 @@ export function Pedidos() {
                 const prod = catalogoApi.find(p => p.id === e.target.value)
                 if (!prod) return
                 setForm(f => ({ ...f, peca: prod.nome, valor: prod.preco_padrao ? String(prod.preco_padrao).replace('.', ',') : f.valor, catalogo_produto_id: prod.id }))
-                if (prod.material_id) {
+                if (prod.materiais_padrao && prod.materiais_padrao.length > 0) {
+                  setMateriaisLinhas(prod.materiais_padrao.map(m => ({ id: crypto.randomUUID(), material_id: m.material_id, peso_g: String(m.peso_g) })))
+                } else if (prod.material_id) {
                   setMateriaisLinhas([{ id: crypto.randomUUID(), material_id: prod.material_id, peso_g: prod.peso_padrao_g ?? '' }])
                 }
               }}
