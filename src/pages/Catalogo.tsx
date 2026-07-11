@@ -1,8 +1,7 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, EyeOff, Eye as EyeIcon, Tag, RefreshCw, ImageOff, Link as LinkIcon, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Tag, RefreshCw, ImageOff, Link as LinkIcon, X, Search, Copy, ArrowUpDown, TrendingUp } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input, Select } from '@/components/ui/Input'
@@ -14,24 +13,47 @@ import { carregarPreferencias } from '@/lib/settings'
 interface ProdutoApiRow {
   id: string; codigo: string; nome: string; material_id: string | null; material_nome: string | null
   peso_padrao_g: string | null; tempo_impressao_h: string | null; preco_padrao: string | null
-  descricao: string | null; ativo: boolean; imagem_url: string | null; link_arquivo: string | null
+  descricao: string | null; ativo: boolean; imagem_url: string | null; link_arquivo: string | null; categoria: string | null
 }
 interface MaterialApiRow { id: string; nome: string; preco_kg: string }
+interface PedidoApiRow { catalogo_produto_id: string | null }
 
-const formVazio = { id: '', codigo: '', nome: '', material_id: '', peso_padrao_g: '', tempo_impressao_h: '', preco_padrao: '', descricao: '', imagem_url: '', link_arquivo: '' }
+const formVazio = { id: '', codigo: '', nome: '', material_id: '', peso_padrao_g: '', tempo_impressao_h: '', preco_padrao: '', descricao: '', imagem_url: '', link_arquivo: '', categoria: '' }
 
 export function Catalogo() {
   const { data, loading, error, reload } = useApi<ProdutoApiRow[]>('/api/catalogo', [])
   const { data: materiaisApi } = useApi<MaterialApiRow[]>('/api/materiais', [])
+  const { data: pedidosApi } = useApi<PedidoApiRow[]>('/api/pedidos', [])
   const [modalOpen, setModalOpen] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
+  const [fichaAberta, setFichaAberta] = useState<ProdutoApiRow | null>(null)
+  const [busca, setBusca] = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState('')
+  const [ordenacao, setOrdenacao] = useState<'recente' | 'vendido' | 'preco_asc' | 'preco_desc' | 'nome'>('recente')
 
   const usandoMock = !loading && !!error
   const vazio = !loading && !error && data.length === 0
   const produtos = usandoMock ? [] : data
+
+  function contagemUso(produtoId: string) {
+    return pedidosApi.filter(p => p.catalogo_produto_id === produtoId).length
+  }
+
+  const categorias = Array.from(new Set(produtos.map(p => p.categoria).filter((c): c is string => !!c))).sort()
+
+  const produtosFiltrados = produtos
+    .filter(p => !busca || p.nome.toLowerCase().includes(busca.toLowerCase()) || p.codigo.toLowerCase().includes(busca.toLowerCase()))
+    .filter(p => !filtroCategoria || p.categoria === filtroCategoria)
+    .sort((a, b) => {
+      if (ordenacao === 'vendido') return contagemUso(b.id) - contagemUso(a.id)
+      if (ordenacao === 'preco_asc') return Number(a.preco_padrao ?? 0) - Number(b.preco_padrao ?? 0)
+      if (ordenacao === 'preco_desc') return Number(b.preco_padrao ?? 0) - Number(a.preco_padrao ?? 0)
+      if (ordenacao === 'nome') return a.nome.localeCompare(b.nome)
+      return 0 // 'recente' já vem assim da API (ORDER BY criado_em DESC não é o padrão atual, mas ORDER BY codigo — deixa como veio)
+    })
 
   function gerarProximoCodigo() {
     const numeros = produtos
@@ -58,12 +80,22 @@ export function Catalogo() {
   }
 
   function abrirNovo() { setForm({ ...formVazio, codigo: gerarProximoCodigo() }); setModalOpen(true) }
+  function abrirDuplicado(p: ProdutoApiRow) {
+    setForm({
+      id: '', codigo: gerarProximoCodigo(), nome: `${p.nome} (cópia)`, material_id: p.material_id ?? '',
+      peso_padrao_g: p.peso_padrao_g ?? '', tempo_impressao_h: p.tempo_impressao_h ?? '',
+      preco_padrao: p.preco_padrao ? String(p.preco_padrao).replace('.', ',') : '', descricao: p.descricao ?? '',
+      imagem_url: p.imagem_url ?? '', link_arquivo: p.link_arquivo ?? '', categoria: p.categoria ?? ''
+    })
+    setModalOpen(true)
+  }
   function abrirEdicao(p: ProdutoApiRow) {
+    setFichaAberta(null)
     setForm({
       id: p.id, codigo: p.codigo, nome: p.nome, material_id: p.material_id ?? '',
       peso_padrao_g: p.peso_padrao_g ?? '', tempo_impressao_h: p.tempo_impressao_h ?? '',
       preco_padrao: p.preco_padrao ? String(p.preco_padrao).replace('.', ',') : '', descricao: p.descricao ?? '',
-      imagem_url: p.imagem_url ?? '', link_arquivo: p.link_arquivo ?? ''
+      imagem_url: p.imagem_url ?? '', link_arquivo: p.link_arquivo ?? '', categoria: p.categoria ?? ''
     })
     setModalOpen(true)
   }
@@ -78,7 +110,8 @@ export function Catalogo() {
         peso_padrao_g: form.peso_padrao_g ? Number(form.peso_padrao_g) : null,
         tempo_impressao_h: form.tempo_impressao_h ? Number(form.tempo_impressao_h.replace(',', '.')) : null,
         preco_padrao: form.preco_padrao ? Number(form.preco_padrao.replace(',', '.')) : null,
-        descricao: form.descricao || null, imagem_url: form.imagem_url || null, link_arquivo: form.link_arquivo || null
+        descricao: form.descricao || null, imagem_url: form.imagem_url || null, link_arquivo: form.link_arquivo || null,
+        categoria: form.categoria || null
       }
       if (form.id) await api.patch(`/api/catalogo?id=${form.id}`, payload)
       else await api.post('/api/catalogo', payload)
@@ -92,11 +125,6 @@ export function Catalogo() {
     } finally {
       setSalvando(false)
     }
-  }
-
-  async function alternarAtivo(p: ProdutoApiRow) {
-    try { await api.patch(`/api/catalogo?id=${p.id}`, { ativo: !p.ativo }); reload() }
-    catch (err) { console.error('[Alternar ativo] erro:', err) }
   }
 
   async function excluir(id: string) {
@@ -114,8 +142,35 @@ export function Catalogo() {
         <Button variant="gradient" onClick={abrirNovo}><Plus size={15} />Novo produto</Button>
       </div>
 
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <div className="relative max-w-[280px] flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+          <input
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar por nome ou código..."
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--muted)] text-sm"
+          />
+        </div>
+        {categorias.length > 0 && (
+          <Select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} className="!mb-0 !w-auto min-w-[160px]">
+            <option value="">Todas categorias</option>
+            {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        )}
+        <Select value={ordenacao} onChange={e => setOrdenacao(e.target.value as typeof ordenacao)} className="!mb-0 !w-auto min-w-[160px]">
+          <option value="recente">Mais recente</option>
+          <option value="vendido">Mais vendido</option>
+          <option value="preco_asc">Preço: menor primeiro</option>
+          <option value="preco_desc">Preço: maior primeiro</option>
+          <option value="nome">Nome (A-Z)</option>
+        </Select>
+      </div>
+
       {vazio ? (
         <Card><div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum produto no catálogo ainda. Clica em "Novo produto" pra começar.</div></Card>
+      ) : produtosFiltrados.length === 0 ? (
+        <Card><div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum produto encontrado pra "{busca}".</div></Card>
       ) : (
         <Card className="p-0">
           <table className="w-full border-collapse text-[13.5px]">
@@ -127,13 +182,13 @@ export function Catalogo() {
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Material</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Peso</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Preço padrão</th>
-                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]"></th>
+                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Vendidos</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]"></th>
               </tr>
             </thead>
             <tbody>
-              {produtos.map((p, i) => {
-                const last = i === produtos.length - 1
+              {produtosFiltrados.map((p, i) => {
+                const last = i === produtosFiltrados.length - 1
                 return (
                   <tr key={p.id}>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
@@ -152,27 +207,27 @@ export function Catalogo() {
                       <span className="inline-flex items-center gap-1 font-mono text-xs font-bold bg-[var(--muted)] px-2 py-1 rounded"><Tag size={11} />{p.codigo}</span>
                     </td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
-                      <div className="flex items-center gap-1.5">
+                      <button onClick={() => setFichaAberta(p)} className="flex items-center gap-1.5 hover:text-[var(--primary)] hover:underline underline-offset-2">
                         {p.nome}
-                        {p.link_arquivo && (
-                          <a href={p.link_arquivo} target="_blank" rel="noreferrer" title="Abrir arquivo de impressão" className="text-[var(--muted-foreground)] hover:text-[var(--primary)]">
-                            <LinkIcon size={12} />
-                          </a>
-                        )}
-                      </div>
-                      {!p.ativo && <Badge color="gray">Oculto</Badge>}
+                        {p.link_arquivo && <LinkIcon size={11} className="text-[var(--muted-foreground)]" />}
+                      </button>
                     </td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.material_nome ?? '—'}</td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.peso_padrao_g ? `${p.peso_padrao_g}g` : '—'}</td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.preco_padrao ? formatMoney(Number(p.preco_padrao)) : '—'}</td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
+                      {contagemUso(p.id) > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><TrendingUp size={12} />{contagemUso(p.id)}x</span>
+                      ) : (
+                        <span className="text-xs text-[var(--muted-foreground)]">—</span>
+                      )}
+                    </td>
+                    <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
                       {confirmandoId === p.id ? (
                         <InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluir(p.id)} />
                       ) : (
                         <div className="flex gap-1">
-                          <button onClick={() => alternarAtivo(p)} title={p.ativo ? 'Ocultar' : 'Mostrar'} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]">
-                            {p.ativo ? <EyeIcon size={13} /> : <EyeOff size={13} />}
-                          </button>
+                          <button onClick={() => abrirDuplicado(p)} title="Duplicar" className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]"><Copy size={13} /></button>
                           <button onClick={() => abrirEdicao(p)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]"><Pencil size={13} /></button>
                           <button onClick={() => setConfirmandoId(p.id)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600"><Trash2 size={13} /></button>
                         </div>
@@ -186,6 +241,67 @@ export function Catalogo() {
         </Card>
       )}
 
+      {/* FICHA DO PRODUTO (view) */}
+      <Modal
+        open={!!fichaAberta}
+        onClose={() => setFichaAberta(null)}
+        title={fichaAberta?.nome ?? ''}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setFichaAberta(null)}>Fechar</Button>
+            {fichaAberta && <Button variant="primary" onClick={() => abrirEdicao(fichaAberta)}><Pencil size={14} />Editar</Button>}
+          </>
+        }
+      >
+        {fichaAberta && (
+          <div className="flex flex-col gap-3">
+            {fichaAberta.imagem_url && (
+              <img
+                src={fichaAberta.imagem_url}
+                alt={fichaAberta.nome}
+                className="w-full h-40 object-cover rounded-lg cursor-pointer hover:opacity-90"
+                onClick={() => setImagemAmpliada(fichaAberta.imagem_url)}
+                onError={ev => { (ev.target as HTMLImageElement).style.display = 'none' }}
+              />
+            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 font-mono text-xs font-bold bg-[var(--muted)] px-2 py-1 rounded w-fit"><Tag size={11} />{fichaAberta.codigo}</span>
+              {fichaAberta.categoria && <span className="text-xs font-semibold bg-[var(--accent)] text-[var(--primary)] px-2 py-1 rounded-full">{fichaAberta.categoria}</span>}
+              {contagemUso(fichaAberta.id) > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><TrendingUp size={12} />vendido {contagemUso(fichaAberta.id)}x</span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="bg-[var(--muted)] rounded-lg p-3">
+                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Material</div>
+                <div className="font-bold mt-0.5">{fichaAberta.material_nome ?? '—'}</div>
+              </div>
+              <div className="bg-[var(--muted)] rounded-lg p-3">
+                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Preço padrão</div>
+                <div className="font-bold mt-0.5">{fichaAberta.preco_padrao ? formatMoney(Number(fichaAberta.preco_padrao)) : '—'}</div>
+              </div>
+              <div className="bg-[var(--muted)] rounded-lg p-3">
+                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Peso padrão</div>
+                <div className="font-bold mt-0.5">{fichaAberta.peso_padrao_g ? `${fichaAberta.peso_padrao_g}g` : '—'}</div>
+              </div>
+              <div className="bg-[var(--muted)] rounded-lg p-3">
+                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Tempo de impressão</div>
+                <div className="font-bold mt-0.5">{fichaAberta.tempo_impressao_h ? `${fichaAberta.tempo_impressao_h}h` : '—'}</div>
+              </div>
+            </div>
+            {fichaAberta.link_arquivo && (
+              <a href={fichaAberta.link_arquivo} target="_blank" rel="noreferrer" className="text-[var(--primary)] underline text-sm flex items-center gap-1.5">
+                <LinkIcon size={13} />Abrir arquivo de impressão
+              </a>
+            )}
+            {fichaAberta.descricao && (
+              <div className="text-sm text-[var(--muted-foreground)]">{fichaAberta.descricao}</div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* NOVO / EDITAR */}
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -214,6 +330,8 @@ export function Catalogo() {
           </div>
           <div><Label>Nome do produto</Label><Input placeholder="Ex: Vaso decorativo P" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} /></div>
         </div>
+        <Label>Categoria (opcional)</Label>
+        <Input placeholder="Ex: Vaso, Chaveiro, Suporte..." value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} />
         <Label>Material padrão</Label>
         <Select
           value={form.material_id}

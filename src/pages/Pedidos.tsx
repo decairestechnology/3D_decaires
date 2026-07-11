@@ -43,6 +43,7 @@ interface PedidoApiRow {
   peso_filamento_g: string | null
   link_arquivo: string | null
   observacoes: string | null
+  catalogo_produto_id: string | null
 }
 interface ClienteApiRow { id: string; nome: string }
 interface MaterialApiRow { id: string; nome: string }
@@ -53,7 +54,7 @@ interface CatalogoApiRow {
 
 const formVazio = {
   id: '', cliente_id: '', peca: '', valor: '', prazo: '', status: 'orcamento' as StatusPedido,
-  material_id: '', peso_filamento_g: '', link_arquivo: '', observacoes: ''
+  material_id: '', peso_filamento_g: '', link_arquivo: '', observacoes: '', catalogo_produto_id: ''
 }
 
 export function Pedidos() {
@@ -102,7 +103,7 @@ export function Pedidos() {
       id: p.id, cliente_id: p.cliente_id, peca: p.peca, valor: String(p.valor).replace('.', ','),
       prazo: p.prazo ? p.prazo.slice(0, 10) : '', status: p.status,
       material_id: p.material_id ?? '', peso_filamento_g: p.peso_filamento_g ?? '',
-      link_arquivo: p.link_arquivo ?? '', observacoes: p.observacoes ?? ''
+      link_arquivo: p.link_arquivo ?? '', observacoes: p.observacoes ?? '', catalogo_produto_id: p.catalogo_produto_id ?? ''
     })
     setModalOpen(true)
   }
@@ -141,7 +142,8 @@ export function Pedidos() {
         observacoes: form.observacoes || null,
         valor: Number(form.valor.replace(',', '.')) || 0,
         prazo: form.prazo || null,
-        status: form.status
+        status: form.status,
+        catalogo_produto_id: form.catalogo_produto_id || null
       }
       if (form.id) await api.patch(`/api/pedidos?id=${form.id}`, payload)
       else await api.post('/api/pedidos', payload)
@@ -317,7 +319,8 @@ export function Pedidos() {
                   peca: prod.nome,
                   material_id: prod.material_id ?? f.material_id,
                   peso_filamento_g: prod.peso_padrao_g ?? f.peso_filamento_g,
-                  valor: prod.preco_padrao ? String(prod.preco_padrao).replace('.', ',') : f.valor
+                  valor: prod.preco_padrao ? String(prod.preco_padrao).replace('.', ',') : f.valor,
+                  catalogo_produto_id: prod.id
                 }))
               }}
             >

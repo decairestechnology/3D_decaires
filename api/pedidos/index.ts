@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     const pedidos = await sql`
       SELECT p.id, p.numero, p.cliente_id, c.nome as cliente_nome, p.peca, p.material, p.valor, p.prazo, p.status,
-        p.material_id, m.nome as material_nome, p.peso_filamento_g, p.link_arquivo, p.observacoes
+        p.material_id, m.nome as material_nome, p.peso_filamento_g, p.link_arquivo, p.observacoes, p.catalogo_produto_id
       FROM pedidos p
       JOIN clientes c ON c.id = p.cliente_id
       LEFT JOIN materiais m ON m.id = p.material_id
@@ -30,10 +30,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { cliente_id, peca, material, valor, prazo, status, material_id, peso_filamento_g, link_arquivo, observacoes } = req.body
+    const { cliente_id, peca, material, valor, prazo, status, material_id, peso_filamento_g, link_arquivo, observacoes, catalogo_produto_id } = req.body
     const [novo] = await sql`
-      INSERT INTO pedidos (cliente_id, peca, material, valor, prazo, status, material_id, peso_filamento_g, link_arquivo, observacoes)
-      VALUES (${cliente_id}, ${peca}, ${material}, ${valor}, ${prazo}, ${status}, ${material_id ?? null}, ${peso_filamento_g ?? null}, ${link_arquivo ?? null}, ${observacoes ?? null})
+      INSERT INTO pedidos (cliente_id, peca, material, valor, prazo, status, material_id, peso_filamento_g, link_arquivo, observacoes, catalogo_produto_id)
+      VALUES (${cliente_id}, ${peca}, ${material}, ${valor}, ${prazo}, ${status}, ${material_id ?? null}, ${peso_filamento_g ?? null}, ${link_arquivo ?? null}, ${observacoes ?? null}, ${catalogo_produto_id ?? null})
       RETURNING *
     `
     return res.status(201).json(novo)

@@ -22,17 +22,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       SELECT cp.*, m.nome as material_nome
       FROM catalogo_produtos cp
       LEFT JOIN materiais m ON m.id = cp.material_id
-      ORDER BY cp.codigo
+      ORDER BY cp.criado_em DESC
     `
     return res.status(200).json(produtos)
   }
 
   if (req.method === 'POST') {
-    const { codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, imagem_url, link_arquivo } = req.body
+    const { codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, imagem_url, link_arquivo, categoria } = req.body
     try {
       const [novo] = await sql`
-        INSERT INTO catalogo_produtos (codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, imagem_url, link_arquivo)
-        VALUES (${codigo}, ${nome}, ${material_id ?? null}, ${peso_padrao_g ?? null}, ${tempo_impressao_h ?? null}, ${preco_padrao ?? null}, ${descricao ?? null}, ${imagem_url ?? null}, ${link_arquivo ?? null})
+        INSERT INTO catalogo_produtos (codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, imagem_url, link_arquivo, categoria)
+        VALUES (${codigo}, ${nome}, ${material_id ?? null}, ${peso_padrao_g ?? null}, ${tempo_impressao_h ?? null}, ${preco_padrao ?? null}, ${descricao ?? null}, ${imagem_url ?? null}, ${link_arquivo ?? null}, ${categoria ?? null})
         RETURNING *
       `
       return res.status(201).json(novo)
@@ -45,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PATCH' && id) {
-    const { codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, ativo, imagem_url, link_arquivo } = req.body
+    const { codigo, nome, material_id, peso_padrao_g, tempo_impressao_h, preco_padrao, descricao, ativo, imagem_url, link_arquivo, categoria } = req.body
     const [atualizado] = await sql`
       UPDATE catalogo_produtos SET
         codigo = COALESCE(${codigo}, codigo), nome = COALESCE(${nome}, nome),
@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         tempo_impressao_h = COALESCE(${tempo_impressao_h}, tempo_impressao_h),
         preco_padrao = COALESCE(${preco_padrao}, preco_padrao), descricao = COALESCE(${descricao}, descricao),
         ativo = COALESCE(${ativo}, ativo), imagem_url = COALESCE(${imagem_url}, imagem_url),
-        link_arquivo = COALESCE(${link_arquivo}, link_arquivo)
+        link_arquivo = COALESCE(${link_arquivo}, link_arquivo), categoria = COALESCE(${categoria}, categoria)
       WHERE id = ${id} RETURNING *
     `
     if (!atualizado) return res.status(404).json({ error: 'Produto não encontrado' })
