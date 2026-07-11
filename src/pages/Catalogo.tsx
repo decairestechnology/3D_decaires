@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, EyeOff, Eye as EyeIcon, Tag } from 'lucide-react'
+import { Plus, Pencil, Trash2, EyeOff, Eye as EyeIcon, Tag, RefreshCw } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -9,13 +9,14 @@ import { Label, Input, Select } from '@/components/ui/Input'
 import { formatMoney } from '@/components/ui/Money'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
+import { carregarPreferencias } from '@/lib/settings'
 
 interface ProdutoApiRow {
   id: string; codigo: string; nome: string; material_id: string | null; material_nome: string | null
   peso_padrao_g: string | null; tempo_impressao_h: string | null; preco_padrao: string | null
   descricao: string | null; ativo: boolean
 }
-interface MaterialApiRow { id: string; nome: string }
+interface MaterialApiRow { id: string; nome: string; preco_kg: string }
 
 const formVazio = { id: '', codigo: '', nome: '', material_id: '', peso_padrao_g: '', tempo_impressao_h: '', preco_padrao: '', descricao: '' }
 
@@ -31,7 +32,31 @@ export function Catalogo() {
   const vazio = !loading && !error && data.length === 0
   const produtos = usandoMock ? [] : data
 
-  function abrirNovo() { setForm(formVazio); setModalOpen(true) }
+  function gerarProximoCodigo() {
+    const numeros = produtos
+      .map(p => p.codigo.match(/^PRD-(\d+)$/))
+      .filter((m): m is RegExpMatchArray => !!m)
+      .map(m => Number(m[1]))
+    const proximo = numeros.length > 0 ? Math.max(...numeros) + 1 : 1
+    return `PRD-${String(proximo).padStart(3, '0')}`
+  }
+
+  function calcularPrecoSugerido(materialId: string, pesoStr: string, horasStr: string) {
+    const material = materiaisApi.find(m => m.id === materialId)
+    if (!material) return null
+    const prefs = carregarPreferencias()
+    const precoKg = Number(material.preco_kg)
+    const pesoG = Number(pesoStr.replace(',', '.')) || 0
+    const horas = Number(horasStr.replace(',', '.')) || 0
+    const custoEnergiaHora = Number(prefs.custoEnergiaPadrao.replace(',', '.')) || 0
+    const margem = Number(prefs.margemPadrao.replace(',', '.')) || 0
+    const custoMaterial = (pesoG / 1000) * precoKg
+    const custoEnergia = horas * custoEnergiaHora
+    const preco = (custoMaterial + custoEnergia) * (1 + margem / 100)
+    return preco > 0 ? preco : null
+  }
+
+  function abrirNovo() { setForm({ ...formVazio, codigo: gerarProximoCodigo() }); setModalOpen(true) }
   function abrirEdicao(p: ProdutoApiRow) {
     setForm({
       id: p.id, codigo: p.codigo, nome: p.nome, material_id: p.material_id ?? '',
@@ -150,19 +175,67 @@ export function Catalogo() {
         }
       >
         <div className="grid grid-cols-2 gap-x-4">
-          <div><Label>Código de referência</Label><Input placeholder="Ex: VASO-P" value={form.codigo} onChange={e => setForm(f => ({ ...f, codigo: e.target.value.toUpperCase() }))} /></div>
+          <div>
+            <Label>Código de referência</Label>
+            <div className="flex gap-2">
+              <Input placeholder="Ex: PRD-001" value={form.codigo} onChange={e => setForm(f => ({ ...f, codigo: e.target.value.toUpperCase() }))} />
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, codigo: gerarProximoCodigo() }))}
+                title="Gerar código automático"
+                className="w-9 h-9 rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)] flex items-center justify-center flex-shrink-0 mb-3"
+              >
+                <RefreshCw size={14} />
+              </button>
+            </div>
+          </div>
           <div><Label>Nome do produto</Label><Input placeholder="Ex: Vaso decorativo P" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} /></div>
         </div>
         <Label>Material padrão</Label>
-        <Select value={form.material_id} onChange={e => setForm(f => ({ ...f, material_id: e.target.value }))}>
+        <Select
+          value={form.material_id}
+          onChange={e => {
+            const materialId = e.target.value
+            const sugerido = calcularPrecoSugerido(materialId, form.peso_padrao_g, form.tempo_impressao_h)
+            setForm(f => ({ ...f, material_id: materialId, preco_padrao: sugerido ? sugerido.toFixed(2).replace('.', ',') : f.preco_padrao }))
+          }}
+        >
           <option value="">Nenhum (escolhe na hora do pedido)</option>
           {materiaisApi.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
         </Select>
         <div className="grid grid-cols-3 gap-x-4">
-          <div><Label>Peso padrão (g)</Label><Input placeholder="80" value={form.peso_padrao_g} onChange={e => setForm(f => ({ ...f, peso_padrao_g: e.target.value }))} /></div>
-          <div><Label>Tempo impressão (h)</Label><Input placeholder="6" value={form.tempo_impressao_h} onChange={e => setForm(f => ({ ...f, tempo_impressao_h: e.target.value }))} /></div>
-          <div><Label>Preço padrão (R$)</Label><Input placeholder="0,00" value={form.preco_padrao} onChange={e => setForm(f => ({ ...f, preco_padrao: e.target.value }))} /></div>
+          <div>
+            <Label>Peso padrão (g)</Label>
+            <Input
+              placeholder="80"
+              value={form.peso_padrao_g}
+              onChange={e => {
+                const peso = e.target.value
+                const sugerido = calcularPrecoSugerido(form.material_id, peso, form.tempo_impressao_h)
+                setForm(f => ({ ...f, peso_padrao_g: peso, preco_padrao: sugerido ? sugerido.toFixed(2).replace('.', ',') : f.preco_padrao }))
+              }}
+            />
+          </div>
+          <div>
+            <Label>Tempo impressão (h)</Label>
+            <Input
+              placeholder="6"
+              value={form.tempo_impressao_h}
+              onChange={e => {
+                const horas = e.target.value
+                const sugerido = calcularPrecoSugerido(form.material_id, form.peso_padrao_g, horas)
+                setForm(f => ({ ...f, tempo_impressao_h: horas, preco_padrao: sugerido ? sugerido.toFixed(2).replace('.', ',') : f.preco_padrao }))
+              }}
+            />
+          </div>
+          <div>
+            <Label>Preço padrão (R$)</Label>
+            <Input placeholder="0,00" value={form.preco_padrao} onChange={e => setForm(f => ({ ...f, preco_padrao: e.target.value }))} />
+          </div>
         </div>
+        {form.material_id && (
+          <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">Calculado com sua margem e custo de energia padrão (Configurações) — pode ajustar na mão.</div>
+        )}
         <Label>Descrição</Label>
         <Input placeholder="Detalhe opcional" value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} />
       </Modal>
