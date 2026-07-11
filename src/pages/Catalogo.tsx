@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, EyeOff, Eye as EyeIcon, Tag, RefreshCw, ImageOff } from 'lucide-react'
+import { Plus, Pencil, Trash2, EyeOff, Eye as EyeIcon, Tag, RefreshCw, ImageOff, Link as LinkIcon, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -14,11 +14,11 @@ import { carregarPreferencias } from '@/lib/settings'
 interface ProdutoApiRow {
   id: string; codigo: string; nome: string; material_id: string | null; material_nome: string | null
   peso_padrao_g: string | null; tempo_impressao_h: string | null; preco_padrao: string | null
-  descricao: string | null; ativo: boolean; imagem_url: string | null
+  descricao: string | null; ativo: boolean; imagem_url: string | null; link_arquivo: string | null
 }
 interface MaterialApiRow { id: string; nome: string; preco_kg: string }
 
-const formVazio = { id: '', codigo: '', nome: '', material_id: '', peso_padrao_g: '', tempo_impressao_h: '', preco_padrao: '', descricao: '', imagem_url: '' }
+const formVazio = { id: '', codigo: '', nome: '', material_id: '', peso_padrao_g: '', tempo_impressao_h: '', preco_padrao: '', descricao: '', imagem_url: '', link_arquivo: '' }
 
 export function Catalogo() {
   const { data, loading, error, reload } = useApi<ProdutoApiRow[]>('/api/catalogo', [])
@@ -27,6 +27,7 @@ export function Catalogo() {
   const [salvando, setSalvando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
+  const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
 
   const usandoMock = !loading && !!error
   const vazio = !loading && !error && data.length === 0
@@ -62,7 +63,7 @@ export function Catalogo() {
       id: p.id, codigo: p.codigo, nome: p.nome, material_id: p.material_id ?? '',
       peso_padrao_g: p.peso_padrao_g ?? '', tempo_impressao_h: p.tempo_impressao_h ?? '',
       preco_padrao: p.preco_padrao ? String(p.preco_padrao).replace('.', ',') : '', descricao: p.descricao ?? '',
-      imagem_url: p.imagem_url ?? ''
+      imagem_url: p.imagem_url ?? '', link_arquivo: p.link_arquivo ?? ''
     })
     setModalOpen(true)
   }
@@ -77,7 +78,7 @@ export function Catalogo() {
         peso_padrao_g: form.peso_padrao_g ? Number(form.peso_padrao_g) : null,
         tempo_impressao_h: form.tempo_impressao_h ? Number(form.tempo_impressao_h.replace(',', '.')) : null,
         preco_padrao: form.preco_padrao ? Number(form.preco_padrao.replace(',', '.')) : null,
-        descricao: form.descricao || null, imagem_url: form.imagem_url || null
+        descricao: form.descricao || null, imagem_url: form.imagem_url || null, link_arquivo: form.link_arquivo || null
       }
       if (form.id) await api.patch(`/api/catalogo?id=${form.id}`, payload)
       else await api.post('/api/catalogo', payload)
@@ -136,7 +137,10 @@ export function Catalogo() {
                 return (
                   <tr key={p.id}>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
-                      <div className="w-9 h-9 rounded-lg bg-[var(--muted)] overflow-hidden flex items-center justify-center flex-shrink-0">
+                      <div
+                        className={`w-9 h-9 rounded-lg bg-[var(--muted)] overflow-hidden flex items-center justify-center flex-shrink-0 ${p.imagem_url ? 'cursor-pointer hover:opacity-80' : ''}`}
+                        onClick={() => p.imagem_url && setImagemAmpliada(p.imagem_url)}
+                      >
                         {p.imagem_url ? (
                           <img src={p.imagem_url} alt={p.nome} className="w-full h-full object-cover" onError={ev => { (ev.target as HTMLImageElement).style.display = 'none' }} />
                         ) : (
@@ -148,7 +152,14 @@ export function Catalogo() {
                       <span className="inline-flex items-center gap-1 font-mono text-xs font-bold bg-[var(--muted)] px-2 py-1 rounded"><Tag size={11} />{p.codigo}</span>
                     </td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
-                      {p.nome}
+                      <div className="flex items-center gap-1.5">
+                        {p.nome}
+                        {p.link_arquivo && (
+                          <a href={p.link_arquivo} target="_blank" rel="noreferrer" title="Abrir arquivo de impressão" className="text-[var(--muted-foreground)] hover:text-[var(--primary)]">
+                            <LinkIcon size={12} />
+                          </a>
+                        )}
+                      </div>
                       {!p.ativo && <Badge color="gray">Oculto</Badge>}
                     </td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.material_nome ?? '—'}</td>
@@ -253,11 +264,34 @@ export function Catalogo() {
         <Label>Link da imagem (opcional)</Label>
         <Input placeholder="https://..." value={form.imagem_url} onChange={e => setForm(f => ({ ...f, imagem_url: e.target.value }))} />
         {form.imagem_url && (
-          <img src={form.imagem_url} alt="Pré-visualização" className="w-full h-32 object-cover rounded-lg mb-3" onError={ev => { (ev.target as HTMLImageElement).style.display = 'none' }} />
+          <img
+            src={form.imagem_url}
+            alt="Pré-visualização"
+            className="w-full h-32 object-cover rounded-lg mb-3 cursor-pointer hover:opacity-80"
+            onClick={() => setImagemAmpliada(form.imagem_url)}
+            onError={ev => { (ev.target as HTMLImageElement).style.display = 'none' }}
+          />
         )}
+        <Label>Link do arquivo de impressão (STL/3MF)</Label>
+        <Input placeholder="https://..." value={form.link_arquivo} onChange={e => setForm(f => ({ ...f, link_arquivo: e.target.value }))} />
         <Label>Descrição</Label>
         <Input placeholder="Detalhe opcional" value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} />
       </Modal>
+
+      {imagemAmpliada && (
+        <div
+          className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-8"
+          onClick={() => setImagemAmpliada(null)}
+        >
+          <button
+            onClick={() => setImagemAmpliada(null)}
+            className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"
+          >
+            <X size={18} />
+          </button>
+          <img src={imagemAmpliada} alt="Imagem ampliada" className="max-w-full max-h-full rounded-lg object-contain" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
     </div>
   )
 }
