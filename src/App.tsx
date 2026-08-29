@@ -9,6 +9,7 @@ import { Orcamento } from '@/pages/Orcamento'
 import { Clientes } from '@/pages/Clientes'
 import { Estoque } from '@/pages/Estoque'
 import { Catalogo } from '@/pages/Catalogo'
+import { Custos } from '@/pages/Custos'
 import { Financeiro } from '@/pages/Financeiro'
 import { Relatorios } from '@/pages/Relatorios'
 import { RankingClientes } from '@/pages/RankingClientes'
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/clientes" element={<Clientes />} />
         <Route path="/estoque" element={<Estoque />} />
         <Route path="/catalogo" element={<Catalogo />} />
+        <Route path="/custos" element={<Custos />} />
         <Route path="/financeiro" element={<Financeiro />} />
         <Route path="/relatorios" element={<Relatorios />} />
         <Route path="/relatorios/ranking-clientes" element={<RankingClientes />} />

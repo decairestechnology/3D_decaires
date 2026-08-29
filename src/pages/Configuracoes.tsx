@@ -60,6 +60,16 @@ export function Configuracoes() {
         <Input value={prefs.margemPadrao} onChange={e => setPrefs(p => ({ ...p, margemPadrao: e.target.value }))} />
         <Label>Custo de energia padrão (R$/h)</Label>
         <Input value={prefs.custoEnergiaPadrao} onChange={e => setPrefs(p => ({ ...p, custoEnergiaPadrao: e.target.value }))} />
+        <Label>Custo da sua hora de trabalho (R$/h)</Label>
+        <Input placeholder="0,00" value={prefs.custoMaoObraHora} onChange={e => setPrefs(p => ({ ...p, custoMaoObraHora: e.target.value }))} />
+        <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
+          Quanto vale seu tempo de acabamento, montagem e embalagem. Deixa 0 se não quiser contar.
+        </div>
+        <Label>Reserva pra manutenção (%)</Label>
+        <Input placeholder="0" value={prefs.percentualManutencao} onChange={e => setPrefs(p => ({ ...p, percentualManutencao: e.target.value }))} />
+        <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
+          Percentual do custo de produção guardado pra bico, correia, peça de reposição. Ex: 5%.
+        </div>
         <Button variant="primary" onClick={handleSalvar}>
           {salvo ? <><Check size={15} />Salvo!</> : 'Salvar'}
         </Button>

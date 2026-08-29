@@ -9,6 +9,7 @@ import { formatMoney } from '@/components/ui/Money'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { carregarPreferencias } from '@/lib/settings'
+import { calcularCusto } from '@/lib/custo'
 
 interface MaterialPadrao { material_id: string; peso_g: number }
 interface ProdutoApiRow {
@@ -87,20 +88,16 @@ export function Catalogo() {
 
   function calcularPrecoSugerido(linhas: LinhaMaterial[], horasStr: string) {
     const prefs = carregarPreferencias()
-    const custoEnergiaHora = Number(prefs.custoEnergiaPadrao.replace(',', '.')) || 0
-    const margem = Number(prefs.margemPadrao.replace(',', '.')) || 0
-    const custoMaterial = linhas.reduce((s, l) => {
-      const material = materiaisApi.find(m => m.id === l.material_id)
-      if (!material) return s
-      const precoKg = Number(material.preco_kg)
-      const pesoG = Number(l.peso_g.replace(',', '.')) || 0
-      return s + (pesoG / 1000) * precoKg
-    }, 0)
-    if (custoMaterial === 0) return null
-    const horas = Number(horasStr.replace(',', '.')) || 0
-    const custoEnergia = horas * custoEnergiaHora
-    const preco = (custoMaterial + custoEnergia) * (1 + margem / 100)
-    return preco > 0 ? preco : null
+    const temMaterial = linhas.some(l => l.material_id && l.peso_g)
+    if (!temMaterial) return null
+    const r = calcularCusto({
+      materiaisLinhas: linhas.map(l => ({ materialId: l.material_id, peso: l.peso_g })),
+      horasImpressao: horasStr,
+      materiais: materiaisApi.map(m => ({ id: m.id, precoKg: Number(m.preco_kg) })),
+      margem: prefs.margemPadrao,
+      custoEnergiaHora: prefs.custoEnergiaPadrao
+    })
+    return r.precoUnitario > 0 ? r.precoUnitario : null
   }
 
   function recalcularPreco(linhas: LinhaMaterial[], horas: string) {

@@ -21,7 +21,7 @@ interface PedidoApiRow {
   id: string; cliente_nome: string; peca: string; valor: string; prazo: string | null; status: string
 }
 interface LancamentoApiRow { tipo: 'receita' | 'despesa'; valor: string; data: string }
-interface MaterialApiRow { nome: string; estoque_g: string; capacidade_g: string }
+interface MaterialApiRow { nome: string; estoque_g: string; capacidade_g: string; alerta_estoque_g: string | null }
 interface EquipamentoApiRow { id: string; nome: string; tipo: 'impressora' | 'ferramenta'; status: string }
 
 const diasSemanaCurtos = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
@@ -60,7 +60,12 @@ export function Dashboard() {
   const lucro = faturamento - despesas
   const margem = faturamento > 0 ? Math.round((lucro / faturamento) * 100) : 0
 
-  const materiaisBaixos = matData.filter(m => (Number(m.estoque_g) / Number(m.capacidade_g)) * 100 <= 25)
+  const materiaisBaixos = matData.filter(m => {
+    // Alerta em gramas manda quando definido; senão cai no padrão de 25% do rolo.
+    const alerta = m.alerta_estoque_g ? Number(m.alerta_estoque_g) : null
+    if (alerta && alerta > 0) return Number(m.estoque_g) <= alerta
+    return (Number(m.estoque_g) / Number(m.capacidade_g)) * 100 <= 25
+  })
 
   const prazos = pedidosAtivos
     .filter((p): p is typeof p & { prazo: string } => !!p.prazo)

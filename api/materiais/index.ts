@@ -23,21 +23,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { nome, preco_kg, estoque_g, capacidade_g } = req.body
+    const { nome, preco_kg, estoque_g, capacidade_g, alerta_estoque_g, marca } = req.body
     const [novo] = await sql`
-      INSERT INTO materiais (nome, preco_kg, estoque_g, capacidade_g)
-      VALUES (${nome}, ${preco_kg}, ${estoque_g}, ${capacidade_g ?? 1000})
+      INSERT INTO materiais (nome, preco_kg, estoque_g, capacidade_g, alerta_estoque_g, marca)
+      VALUES (${nome}, ${preco_kg}, ${estoque_g}, ${capacidade_g ?? 1000}, ${alerta_estoque_g ?? null}, ${marca ?? null})
       RETURNING *
     `
     return res.status(201).json(novo)
   }
 
   if (req.method === 'PATCH' && id) {
-    const { nome, preco_kg, estoque_g, capacidade_g } = req.body
+    const { nome, preco_kg, estoque_g, capacidade_g, alerta_estoque_g, marca } = req.body
     const [atualizado] = await sql`
       UPDATE materiais SET
         nome = COALESCE(${nome}, nome), preco_kg = COALESCE(${preco_kg}, preco_kg),
-        estoque_g = COALESCE(${estoque_g}, estoque_g), capacidade_g = COALESCE(${capacidade_g}, capacidade_g)
+        estoque_g = COALESCE(${estoque_g}, estoque_g), capacidade_g = COALESCE(${capacidade_g}, capacidade_g),
+        alerta_estoque_g = COALESCE(${alerta_estoque_g}, alerta_estoque_g), marca = COALESCE(${marca}, marca)
       WHERE id = ${id} RETURNING *
     `
     if (!atualizado) return res.status(404).json({ error: 'Material não encontrado' })

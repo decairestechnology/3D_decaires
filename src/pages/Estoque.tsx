@@ -12,17 +12,23 @@ import { api } from '@/lib/api'
 import { formatarDataBR } from '@/lib/date'
 import { materiais as materiaisMock, produtosProntos as produtosMock } from '@/data/mockData'
 
-interface MaterialApiRow { id: string; nome: string; preco_kg: string; estoque_g: string; capacidade_g: string }
+interface MaterialApiRow { id: string; nome: string; preco_kg: string; estoque_g: string; capacidade_g: string; alerta_estoque_g: string | null; marca: string | null }
 interface ProdutoApiRow { id: string; nome: string; material: string | null; quantidade: number; custo_unitario: string; preco_venda: string }
 interface PerdaApiRow { id: string; peso_perdido_g: string; motivo: string | null; custo: string | null; data: string; material_id: string | null; material_nome: string | null }
 
-function statusMaterial(pct: number): { color: 'red' | 'amber' | 'green'; label: string; bar: string } {
+function statusMaterial(pct: number, estoqueG?: number, alertaG?: number | null): { color: 'red' | 'amber' | 'green'; label: string; bar: string } {
+  // Se você definiu um alerta em gramas, ele manda. Senão cai no percentual.
+  if (alertaG && alertaG > 0 && estoqueG !== undefined) {
+    if (estoqueG <= alertaG) return { color: 'red', label: 'Baixo', bar: 'var(--destructive)' }
+    if (estoqueG <= alertaG * 2) return { color: 'amber', label: 'Médio', bar: '#F59E0B' }
+    return { color: 'green', label: 'OK', bar: '#10B981' }
+  }
   if (pct <= 25) return { color: 'red', label: 'Baixo', bar: 'var(--destructive)' }
   if (pct <= 50) return { color: 'amber', label: 'Médio', bar: '#F59E0B' }
   return { color: 'green', label: 'OK', bar: '#10B981' }
 }
 
-const formMaterialVazio = { id: '', nome: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000' }
+const formMaterialVazio = { id: '', nome: '', marca: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000', alerta_estoque_g: '' }
 const formProdutoVazio = { id: '', nome: '', material: '', quantidade: '1', custo_unitario: '', preco_venda: '' }
 const formPerdaVazio = { id: '', material_id: '', peso_perdido_g: '', motivo: '', custo: '', data: '' }
 
@@ -43,8 +49,8 @@ export function Estoque() {
   const matMock = !matLoading && !!matError
   const matVazio = !matLoading && !matError && matApi.length === 0
   const materiais = matMock
-    ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, estoqueG: m.estoqueG, capacidadeG: m.capacidadeG, precoKg: m.precoKg }))
-    : matApi.map(m => ({ id: m.id, nome: m.nome, estoqueG: Number(m.estoque_g), capacidadeG: Number(m.capacidade_g), precoKg: Number(m.preco_kg) }))
+    ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, marca: '', estoqueG: m.estoqueG, capacidadeG: m.capacidadeG, precoKg: m.precoKg, alertaEstoqueG: null }))
+    : matApi.map(m => ({ id: m.id, nome: m.nome, marca: m.marca ?? '', estoqueG: Number(m.estoque_g), capacidadeG: Number(m.capacidade_g), precoKg: Number(m.preco_kg), alertaEstoqueG: m.alerta_estoque_g ? Number(m.alerta_estoque_g) : null }))
 
   const prodMock = !prodLoading && !!prodError
   const prodVazio = !prodLoading && !prodError && prodApi.length === 0
@@ -61,7 +67,7 @@ export function Estoque() {
       ]
     : perdasApi.map(p => ({ id: p.id, data: p.data, materialId: p.material_id ?? '', material: p.material_nome ?? '—', peso: Number(p.peso_perdido_g), motivo: p.motivo ?? '—', custo: Number(p.custo ?? 0) }))
 
-  const baixos = materiais.filter(m => (m.estoqueG / m.capacidadeG) * 100 <= 25)
+  const baixos = materiais.filter(m => statusMaterial((m.estoqueG / m.capacidadeG) * 100, m.estoqueG, m.alertaEstoqueG).color === 'red')
 
   function abrirNovo() {
     if (aba === 'materia') setFormMaterial(formMaterialVazio)
@@ -69,7 +75,7 @@ export function Estoque() {
     setModalOpen(true)
   }
   function abrirEdicaoMaterial(m: typeof materiais[number]) {
-    setFormMaterial({ id: m.id, nome: m.nome, preco_kg: String(m.precoKg).replace('.', ','), estoque_g: String(m.estoqueG), capacidade_g: String(m.capacidadeG) })
+    setFormMaterial({ id: m.id, nome: m.nome, marca: m.marca ?? '', preco_kg: String(m.precoKg).replace('.', ','), estoque_g: String(m.estoqueG), capacidade_g: String(m.capacidadeG), alerta_estoque_g: m.alertaEstoqueG ? String(m.alertaEstoqueG) : '' })
     setModalOpen(true)
   }
   function abrirEdicaoProduto(p: typeof produtos[number]) {
@@ -92,9 +98,11 @@ export function Estoque() {
     try {
       const payload = {
         nome: formMaterial.nome,
+        marca: formMaterial.marca || null,
         preco_kg: Number(formMaterial.preco_kg.replace(',', '.')) || 0,
         estoque_g: Number(formMaterial.estoque_g) || 0,
-        capacidade_g: Number(formMaterial.capacidade_g) || 1000
+        capacidade_g: Number(formMaterial.capacidade_g) || 1000,
+        alerta_estoque_g: formMaterial.alerta_estoque_g ? Number(formMaterial.alerta_estoque_g) : null
       }
       if (formMaterial.id) await api.patch(`/api/materiais?id=${formMaterial.id}`, payload)
       else await api.post('/api/materiais', payload)
@@ -210,11 +218,14 @@ export function Estoque() {
           <div className="flex gap-4 flex-wrap">
             {materiais.map(m => {
               const pct = (m.estoqueG / m.capacidadeG) * 100
-              const s = statusMaterial(pct)
+              const s = statusMaterial(pct, m.estoqueG, m.alertaEstoqueG)
               return (
                 <Card key={m.id} className="flex-1 min-w-[220px]">
                   <div className="flex justify-between items-start">
-                    <b className="text-sm">{m.nome}</b>
+                    <div>
+                      <b className="text-sm">{m.nome}</b>
+                      {m.marca && <div className="text-[11px] text-[var(--muted-foreground)]">{m.marca}</div>}
+                    </div>
                     <div className="flex items-center gap-2">
                       <Badge color={s.color}>{s.label}</Badge>
                       {!matMock && confirmandoId !== m.id && (
@@ -377,13 +388,20 @@ export function Estoque() {
       >
         {aba === 'materia' ? (
           <>
-            <Label>Nome do material</Label>
-            <Input placeholder="Ex: PLA Azul" value={formMaterial.nome} onChange={e => setFormMaterial(f => ({ ...f, nome: e.target.value }))} />
+            <div className="grid grid-cols-2 gap-x-4">
+              <div><Label>Nome do material</Label><Input placeholder="Ex: PLA Azul" value={formMaterial.nome} onChange={e => setFormMaterial(f => ({ ...f, nome: e.target.value }))} /></div>
+              <div><Label>Marca (opcional)</Label><Input placeholder="Ex: Voolt3D" value={formMaterial.marca} onChange={e => setFormMaterial(f => ({ ...f, marca: e.target.value }))} /></div>
+            </div>
             <Label>Preço por kg (R$)</Label>
             <Input placeholder="79,90" value={formMaterial.preco_kg} onChange={e => setFormMaterial(f => ({ ...f, preco_kg: e.target.value }))} />
             <div className="grid grid-cols-2 gap-x-4">
               <div><Label>Estoque atual (g)</Label><Input value={formMaterial.estoque_g} onChange={e => setFormMaterial(f => ({ ...f, estoque_g: e.target.value }))} /></div>
               <div><Label>Capacidade do rolo (g)</Label><Input value={formMaterial.capacidade_g} onChange={e => setFormMaterial(f => ({ ...f, capacidade_g: e.target.value }))} /></div>
+            </div>
+            <Label>Alerta de estoque baixo (g)</Label>
+            <Input placeholder="Ex: 100" value={formMaterial.alerta_estoque_g} onChange={e => setFormMaterial(f => ({ ...f, alerta_estoque_g: e.target.value }))} />
+            <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
+              Te avisa quando sobrar essa quantidade ou menos. Deixa vazio pra usar o padrão de 25% do rolo.
             </div>
           </>
         ) : (
