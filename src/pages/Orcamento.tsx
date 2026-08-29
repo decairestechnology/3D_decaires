@@ -359,7 +359,7 @@ export function Orcamento() {
   return (
     <div>
       <h1 className="text-2xl font-semibold m-0">Orçamento</h1>
-      <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Monta orçamentos com uma ou várias peças (com uma ou várias cores cada) {usandoMock && '(materiais de exemplo)'}</p>
+      <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Monta orçamentos com uma ou várias peças (com uma ou várias cores cada) {usandoMock && '(materiais de exemplo)'}</p>
 
       {vazio ? (
         <Card>

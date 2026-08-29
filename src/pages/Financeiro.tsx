@@ -1,5 +1,5 @@
 import { useMemo, useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, BarChart3, LineChart as LineChartIcon } from 'lucide-react'
+import { Plus, Pencil, Trash2, BarChart3, LineChart as LineChartIcon, Wallet } from 'lucide-react'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -8,6 +8,7 @@ import { Money, formatMoney } from '@/components/ui/Money'
 import { Modal } from '@/components/ui/Modal'
 import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input, Select } from '@/components/ui/Input'
+import { EstadoVazio } from '@/components/ui/EstadoVazio'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { lancamentos as lancamentosMock } from '@/data/mockData'
@@ -116,7 +117,7 @@ export function Financeiro() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-semibold m-0">Financeiro</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Receitas, despesas e lucro {usandoMock && '(dados de exemplo)'}</p>
@@ -184,10 +185,10 @@ export function Financeiro() {
         </div>
       </Card>
 
-      <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Lançamentos recentes</h2>
+      <h2 className="text-[1.05rem] font-semibold mt-6 mb-3">Lançamentos recentes</h2>
       <Card className="p-0">
         {vazio ? (
-          <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum lançamento ainda. Clica em "Novo lançamento" pra começar.</div>
+          <EstadoVazio icone={Wallet} titulo="Nenhum lançamento" descricao="Registre receitas e despesas pra acompanhar o caixa." acaoTexto="Novo lançamento" onAcao={abrirNovo} />
         ) : (
         <table className="w-full border-collapse text-[13.5px]">
           <thead>

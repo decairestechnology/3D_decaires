@@ -1,11 +1,12 @@
 import { useMemo, useState, FormEvent } from 'react'
-import { Package, Wrench, Plus, Users, Trash2, Pencil, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Package, Wrench, Plus, Users, Trash2, Pencil, ChevronLeft, ChevronRight, X, Calendar } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input, Select } from '@/components/ui/Input'
+import { EstadoVazio } from '@/components/ui/EstadoVazio'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { soData, formatarDataCurta } from '@/lib/date'
@@ -135,7 +136,7 @@ export function Agenda() {
   const listaCompromissos = (
     <Card className="p-0">
       {vazio ? (
-        <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum compromisso ainda. Clica em "Novo compromisso" pra começar.</div>
+        <EstadoVazio icone={Calendar} titulo="Nenhum compromisso" descricao="Entregas, manutenções e reuniões aparecem aqui." acaoTexto="Novo compromisso" onAcao={abrirNovo} />
       ) : eventos.map((e, i) => {
         const info = tipoInfo[e.tipo]
         const Icon = info.icon
@@ -177,7 +178,7 @@ export function Agenda() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-5 flex-wrap gap-3">
+      <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold m-0">Agenda</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Prazos, manutenções e reuniões {usandoMock && '(sem conexão com o banco)'}</p>
@@ -260,7 +261,7 @@ export function Agenda() {
 
       {visao === 'mensal' && (
         <>
-          <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Próximos compromissos</h2>
+          <h2 className="text-[1.05rem] font-semibold mt-6 mb-3">Próximos compromissos</h2>
           {listaCompromissos}
         </>
       )}

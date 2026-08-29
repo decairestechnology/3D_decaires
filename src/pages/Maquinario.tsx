@@ -129,7 +129,7 @@ export function Maquinario() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-semibold m-0">Maquinário e ferramentas</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Seus equipamentos, valor investido e manutenção {usandoMock && '(sem conexão com o banco)'}</p>
@@ -152,7 +152,7 @@ export function Maquinario() {
         </Card>
       </div>
 
-      <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Impressoras</h2>
+      <h2 className="text-[1.05rem] font-semibold mt-6 mb-3">Impressoras</h2>
       {vazio || impressoras.length === 0 ? (
         <Card><div className="text-center py-6 text-sm text-[var(--muted-foreground)]">Nenhuma impressora cadastrada ainda.</div></Card>
       ) : (
@@ -208,7 +208,7 @@ export function Maquinario() {
       </div>
       )}
 
-      <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Ferramentas</h2>
+      <h2 className="text-[1.05rem] font-semibold mt-6 mb-3">Ferramentas</h2>
       <Card className="p-0">
         {vazio || ferramentas.length === 0 ? (
           <div className="text-center py-6 text-sm text-[var(--muted-foreground)]">Nenhuma ferramenta cadastrada ainda.</div>

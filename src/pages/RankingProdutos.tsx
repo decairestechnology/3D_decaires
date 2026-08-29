@@ -29,7 +29,7 @@ export function RankingProdutos() {
     <div>
       <Button variant="ghost" onClick={() => navigate('/relatorios')} className="mb-4"><ArrowLeft size={15} />Voltar pra Relatórios</Button>
       <h1 className="text-2xl font-semibold m-0 flex items-center gap-2"><Package size={22} className="text-[var(--primary)]" />Ranking de produtos</h1>
-      <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Peças mais pedidas, por faturamento total</p>
+      <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Peças mais pedidas, por faturamento total</p>
 
       <Card className="p-0">
         {ranking.length === 0 ? (

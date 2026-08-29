@@ -9,7 +9,7 @@ export function Layout() {
   return (
     <div className="flex min-h-screen">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
-      <main className="flex-1 p-7 w-full min-w-0">
+      <main className="flex-1 px-5 py-5 w-full min-w-0">
         <Topbar />
         <Outlet />
       </main>

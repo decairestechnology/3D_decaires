@@ -23,7 +23,7 @@ export function Configuracoes() {
   return (
     <div>
       <h1 className="text-2xl font-semibold m-0">Configurações</h1>
-      <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Preferências e categorias do seu jeito</p>
+      <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Preferências e categorias do seu jeito</p>
 
       <div className="flex gap-4 flex-wrap">
         <Card className="flex-1 min-w-[260px] flex justify-between items-center">

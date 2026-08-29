@@ -1,5 +1,7 @@
 import { useState, FormEvent } from 'react'
 import { Plus, Pencil, Trash2, AlertTriangle, Package, Receipt } from 'lucide-react'
+import { EstadoVazio } from '@/components/ui/EstadoVazio'
+import { CabecalhoPagina } from '@/components/ui/CabecalhoPagina'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -140,15 +142,15 @@ export function Custos() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-3.5">
-        <div>
-          <h1 className="text-2xl font-semibold m-0">Custos</h1>
-          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Insumos que não são filamento e custos fixos do negócio</p>
-        </div>
-        <Button variant="gradient" onClick={aba === 'extras' ? abrirNovoExtra : abrirNovoOp}>
-          <Plus size={15} />{aba === 'extras' ? 'Novo material extra' : 'Novo custo fixo'}
-        </Button>
-      </div>
+      <CabecalhoPagina
+        titulo="Custos"
+        descricao="Insumos que não são filamento e custos fixos do negócio"
+        acao={
+          <Button variant="gradient" onClick={aba === 'extras' ? abrirNovoExtra : abrirNovoOp}>
+            <Plus size={15} />{aba === 'extras' ? 'Novo material extra' : 'Novo custo fixo'}
+          </Button>
+        }
+      />
 
       <div className="mb-4 flex gap-2">
         {([['extras', 'Materiais extras'], ['operacionais', 'Custos operacionais']] as const).map(([tab, label]) => (
@@ -175,7 +177,7 @@ export function Custos() {
           )}
           <Card className="p-0">
             {extrasVazio ? (
-              <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum material extra ainda. Clica em "Novo material extra" pra começar.</div>
+              <EstadoVazio icone={Package} titulo="Nenhum material extra ainda" descricao="Parafuso, ímã, tinta, embalagem — tudo que entra na peça além do filamento." acaoTexto="Cadastrar primeiro material" onAcao={abrirNovoExtra} />
             ) : (
               <table className="w-full border-collapse text-[13.5px]">
                 <thead>
@@ -243,7 +245,7 @@ export function Custos() {
           </div>
           <Card className="p-0">
             {opsVazio ? (
-              <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum custo fixo ainda. Clica em "Novo custo fixo" pra começar.</div>
+              <EstadoVazio icone={Receipt} titulo="Nenhum custo fixo ainda" descricao="Aluguel, salário, imposto — o que você paga todo mês independente de produzir." acaoTexto="Cadastrar primeiro custo" onAcao={abrirNovoOp} />
             ) : (
               <table className="w-full border-collapse text-[13.5px]">
                 <thead>

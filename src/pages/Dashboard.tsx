@@ -101,10 +101,10 @@ export function Dashboard() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-1.5">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-semibold m-0">Dashboard</h1>
-          <p className="text-[var(--muted-foreground)] text-sm mt-0.5 mb-5">Resumo geral da operação {usandoMock && '(dados de exemplo)'}</p>
+          <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Resumo geral da operação {usandoMock && '(dados de exemplo)'}</p>
         </div>
         <Button variant="gradient" onClick={() => navigate('/pedidos', { state: { abrirModal: true } })}><Package size={15} />Novo pedido</Button>
       </div>
@@ -155,7 +155,7 @@ export function Dashboard() {
         </Card>
       </div>
 
-      <div className="flex gap-4 flex-wrap mt-7">
+      <div className="flex gap-4 flex-wrap mt-6">
         <div className="flex-[2] min-w-[340px]">
           <h2 className="text-[1.05rem] font-semibold mb-3">Prazos de entrega</h2>
           <Card className="p-0">
@@ -210,7 +210,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Impressoras</h2>
+      <h2 className="text-[1.05rem] font-semibold mt-6 mb-3">Impressoras</h2>
       <Card className="p-0">
         {impressoras.length === 0 ? (
           <div className="text-center py-6 text-xs text-[var(--muted-foreground)]">Cadastre suas impressoras em Maquinário.</div>
@@ -229,7 +229,7 @@ export function Dashboard() {
         )}
       </Card>
 
-      <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Pedidos recentes {usandoMock && <span className="text-xs font-normal text-[var(--muted-foreground)]">(dados de exemplo)</span>}</h2>
+      <h2 className="text-[1.05rem] font-semibold mt-6 mb-3">Pedidos recentes {usandoMock && <span className="text-xs font-normal text-[var(--muted-foreground)]">(dados de exemplo)</span>}</h2>
       <Card className="p-0">
         {pedidosRecentes.length === 0 ? (
           <div className="text-center py-6 text-xs text-[var(--muted-foreground)]">Nenhum pedido cadastrado ainda.</div>

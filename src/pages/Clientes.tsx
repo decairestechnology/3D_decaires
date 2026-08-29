@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, Mail, MapPin, FileText, Phone, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Mail, MapPin, FileText, Phone, Search, Users } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal'
 import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input } from '@/components/ui/Input'
 import { Money, formatMoney } from '@/components/ui/Money'
+import { EstadoVazio } from '@/components/ui/EstadoVazio'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { formatarDataBR } from '@/lib/date'
@@ -120,7 +121,7 @@ export function Clientes() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-semibold m-0">Clientes</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Histórico e contato {usandoMock && '(dados de exemplo)'}</p>
@@ -140,7 +141,7 @@ export function Clientes() {
 
       <Card className="p-0">
         {vazio ? (
-          <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum cliente cadastrado ainda. Clica em "Novo cliente" pra começar.</div>
+          <EstadoVazio icone={Users} titulo="Nenhum cliente cadastrado" descricao="Cadastre seus clientes pra vincular em pedidos e orçamentos." acaoTexto="Cadastrar primeiro cliente" onAcao={abrirNovo} />
         ) : clientesFiltrados.length === 0 ? (
           <div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum cliente encontrado pra "{busca}".</div>
         ) : (

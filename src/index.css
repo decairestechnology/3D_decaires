@@ -52,3 +52,21 @@ input, select, textarea {
   filter: blur(5px);
   user-select: none;
 }
+
+/* Densidade padronizada de tabela — evita cada tela definir seu próprio padding.
+   Aplica em qualquer <table> dentro de um Card, sem precisar editar tela por tela. */
+table th {
+  padding: 0.5rem 0.75rem;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+table td {
+  padding: 0.5rem 0.75rem;
+}
+
+/* Linha da tabela ganha destaque leve no hover, ajuda a seguir a linha com o olho */
+tbody tr:hover {
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+}

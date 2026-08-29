@@ -196,7 +196,7 @@ export function Pedidos() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-semibold m-0">Pedidos</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Fluxo de produção {usandoMock && '(sem conexão com o banco)'}</p>

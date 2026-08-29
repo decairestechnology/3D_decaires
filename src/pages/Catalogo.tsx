@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/Modal'
 import { InlineConfirm } from '@/components/ui/InlineConfirm'
 import { Label, Input, Select } from '@/components/ui/Input'
 import { formatMoney } from '@/components/ui/Money'
+import { EstadoVazio } from '@/components/ui/EstadoVazio'
 import { useApi } from '@/lib/useApi'
 import { api } from '@/lib/api'
 import { carregarPreferencias } from '@/lib/settings'
@@ -181,7 +182,7 @@ export function Catalogo() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-semibold m-0">Catálogo</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Produtos com código de referência — usa em Pedido ou Orçamento sem digitar tudo de novo {usandoMock && '(sem conexão com o banco)'}</p>
@@ -215,7 +216,7 @@ export function Catalogo() {
       </div>
 
       {vazio ? (
-        <Card><div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum produto no catálogo ainda. Clica em "Novo produto" pra começar.</div></Card>
+        <Card><EstadoVazio icone={Tag} titulo="Catálogo vazio" descricao="Cadastre produtos com código de referência pra reaproveitar em pedidos e orçamentos." acaoTexto="Cadastrar primeiro produto" onAcao={abrirNovo} /></Card>
       ) : produtosFiltrados.length === 0 ? (
         <Card><div className="text-center py-10 text-sm text-[var(--muted-foreground)]">Nenhum produto encontrado pra "{busca}".</div></Card>
       ) : (

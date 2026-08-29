@@ -195,7 +195,7 @@ export function Relatorios() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-semibold m-0">Relatórios</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Como o período selecionado se comportou {usandoMock && '(dados de exemplo)'}</p>
@@ -303,7 +303,7 @@ export function Relatorios() {
         </Card>
       </div>
 
-      <div className="flex gap-4 flex-wrap mt-7">
+      <div className="flex gap-4 flex-wrap mt-6">
         <Card className="flex-1 min-w-[280px] cursor-pointer hover:border-[var(--primary)]" onClick={() => navigate('/relatorios/ranking-clientes')}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 font-bold"><Trophy size={17} className="text-amber-500" />Ranking de clientes</div>

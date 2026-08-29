@@ -182,7 +182,7 @@ export function Estoque() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-3.5">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-semibold m-0">Estoque</h1>
           <p className="text-[var(--muted-foreground)] text-sm mt-0.5">Matéria-prima e produtos prontos</p>
@@ -252,7 +252,7 @@ export function Estoque() {
           </div>
           )}
 
-          <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Perdas / falhas de impressão</h2>
+          <h2 className="text-[1.05rem] font-semibold mt-6 mb-3">Perdas / falhas de impressão</h2>
           <Card className="p-0">
             {perdasVazio ? (
               <div className="text-center py-8 text-sm text-[var(--muted-foreground)]">Nenhuma perda registrada ainda.</div>
@@ -316,7 +316,7 @@ export function Estoque() {
             </Card>
           </div>
 
-          <h2 className="text-[1.05rem] font-semibold mt-7 mb-3">Produtos prontos pra vender</h2>
+          <h2 className="text-[1.05rem] font-semibold mt-6 mb-3">Produtos prontos pra vender</h2>
           <Card className="p-0">
             {prodVazio ? (
               <div className="text-center py-8 text-sm text-[var(--muted-foreground)]">Nenhum produto pronto cadastrado ainda.</div>
