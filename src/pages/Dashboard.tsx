@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, Banknote, TrendingUp, AlertTriangle, Printer, Trophy, ChevronRight } from 'lucide-react'
+import { Package, Banknote, TrendingUp, AlertTriangle, Printer, Trophy, ChevronRight, Wallet } from 'lucide-react'
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -19,6 +19,7 @@ const statusBadge: Record<string, { color: 'cyan' | 'amber' | 'green' | 'gray'; 
 
 interface PedidoApiRow {
   id: string; cliente_nome: string; peca: string; valor: string; prazo: string | null; status: string
+  status_pagamento?: string; valor_pago?: string
 }
 interface LancamentoApiRow { tipo: 'receita' | 'despesa'; valor: string; data: string }
 interface MaterialApiRow { nome: string; estoque_g: string; capacidade_g: string; alerta_estoque_g: string | null }
@@ -59,6 +60,12 @@ export function Dashboard() {
   const despesas = lancamentosMes.filter(l => l.tipo === 'despesa').reduce((s, l) => s + Number(l.valor), 0)
   const lucro = faturamento - despesas
   const margem = faturamento > 0 ? Math.round((lucro / faturamento) * 100) : 0
+
+  // Quanto o cliente ainda deve: pedido não cancelado com pagamento pendente ou parcial
+  const aReceber = (usandoMock ? [] : data).reduce((s, p) => {
+    if (p.status_pagamento === 'pago') return s
+    return s + (Number(p.valor) - Number(p.valor_pago ?? 0))
+  }, 0)
 
   const materiaisBaixos = matData.filter(m => {
     // Alerta em gramas manda quando definido; senão cai no padrão de 25% do rolo.
@@ -145,6 +152,11 @@ export function Dashboard() {
           <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><TrendingUp size={14} />Lucro estimado</div>
           <div className="text-2xl font-extrabold"><Money value={lucro} /></div>
           <div className="text-xs font-semibold mt-1 text-[var(--muted-foreground)]">margem {margem}%</div>
+        </Card>
+        <Card className="flex-1 min-w-[190px] cursor-pointer hover:border-[var(--primary)]" onClick={() => navigate('/pedidos')}>
+          <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><Wallet size={14} />A receber</div>
+          <div className="text-2xl font-extrabold"><Money value={aReceber} /></div>
+          <div className="text-xs text-[var(--muted-foreground)] mt-1">pedidos ainda não pagos</div>
         </Card>
         <Card className="flex-1 min-w-[190px] cursor-pointer hover:border-[var(--primary)]" onClick={() => navigate('/estoque')}>
           <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><AlertTriangle size={14} />Estoque baixo</div>

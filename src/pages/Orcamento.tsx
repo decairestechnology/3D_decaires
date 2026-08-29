@@ -280,25 +280,35 @@ export function Orcamento() {
     }
     setConvertendoId(orc.id)
     try {
-      for (const item of orc.itens) {
+      // Antes cada peça virava um pedido separado. Agora vira um pedido só, com vários itens.
+      const itensPedido = orc.itens.map(item => {
         const materiaisItem = item.materiais ?? []
-        const materiaisUsados = materiaisItem.filter(m => m.materialId).map(m => ({ material_id: m.materialId, peso_g: Number(m.peso) }))
-        const nomes = materiaisItem.map(m => materiais.find(mm => mm.id === m.materialId)?.nome).filter(Boolean).join(' + ')
-        const primeira = materiaisItem[0]
-        await api.post('/api/pedidos', {
-          cliente_id: orc.cliente_id,
-          peca: item.quantidade > 1 ? `${item.nome} (x${item.quantidade})` : item.nome,
-          material: nomes || null,
-          material_id: primeira?.materialId || null,
-          peso_filamento_g: primeira?.peso ? Number(primeira.peso) : null,
-          materiais_usados: materiaisUsados,
-          link_arquivo: null,
-          observacoes: `Gerado a partir de orçamento salvo · ${item.horas ?? '?'}h de impressão`,
-          valor: item.valor,
-          prazo: null,
-          status: 'orcamento'
-        })
-      }
+        return {
+          id: crypto.randomUUID(),
+          origem: 'manual' as const,
+          nome: item.nome,
+          quantidade: item.quantidade,
+          valor_unitario: item.quantidade > 0 ? item.valor / item.quantidade : item.valor,
+          catalogo_produto_id: null,
+          produto_pronto_id: null,
+          materiais: materiaisItem.filter(m => m.materialId).map(m => ({ material_id: m.materialId, peso_g: Number(m.peso) })),
+          link_arquivo: null
+        }
+      })
+
+      const nomes = Array.from(new Set(
+        orc.itens.flatMap(i => (i.materiais ?? []).map(m => materiais.find(mm => mm.id === m.materialId)?.nome)).filter(Boolean)
+      ))
+
+      await api.post('/api/pedidos', {
+        cliente_id: orc.cliente_id,
+        itens: itensPedido,
+        material: nomes.length > 0 ? nomes.join(' + ') : null,
+        observacoes: 'Gerado a partir de orçamento salvo',
+        prazo: null,
+        status: 'orcamento',
+        status_pagamento: 'pendente'
+      })
       await api.patch(`/api/orcamentos?id=${orc.id}`, { convertido: true })
       reloadSalvos()
       alert('Pronto! Os itens desse orçamento agora estão em Pedidos, na coluna "Orçamento".')
