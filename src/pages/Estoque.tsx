@@ -33,7 +33,7 @@ function statusMaterial(pct: number, estoqueG?: number, alertaG?: number | null)
   return { color: 'green', label: 'OK', bar: '#10B981' }
 }
 
-const formMaterialVazio = { id: '', nome: '', marca: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000', alerta_estoque_g: '' }
+const formMaterialVazio = { id: '', nome: '', marca: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000', alerta_estoque_g: '', lancar_despesa: false, valor_compra: '' }
 const formProdutoVazio = { id: '', nome: '', material: '', quantidade: '1', custo_unitario: '', preco_venda: '', catalogo_produto_id: '' }
 const formPerdaVazio = { id: '', material_id: '', peso_perdido_g: '', motivo: '', custo: '', data: '' }
 
@@ -82,7 +82,7 @@ export function Estoque() {
     setModalOpen(true)
   }
   function abrirEdicaoMaterial(m: typeof materiais[number]) {
-    setFormMaterial({ id: m.id, nome: m.nome, marca: m.marca ?? '', preco_kg: String(m.precoKg).replace('.', ','), estoque_g: String(m.estoqueG), capacidade_g: String(m.capacidadeG), alerta_estoque_g: m.alertaEstoqueG ? String(m.alertaEstoqueG) : '' })
+    setFormMaterial({ id: m.id, nome: m.nome, marca: m.marca ?? '', preco_kg: String(m.precoKg).replace('.', ','), estoque_g: String(m.estoqueG), capacidade_g: String(m.capacidadeG), alerta_estoque_g: m.alertaEstoqueG ? String(m.alertaEstoqueG) : '', lancar_despesa: false, valor_compra: '' })
     setModalOpen(true)
   }
   function abrirEdicaoProduto(p: typeof produtos[number]) {
@@ -134,8 +134,23 @@ export function Estoque() {
         capacidade_g: Number(formMaterial.capacidade_g) || 1000,
         alerta_estoque_g: formMaterial.alerta_estoque_g ? Number(formMaterial.alerta_estoque_g) : null
       }
-      if (formMaterial.id) await api.patch(`/api/materiais?id=${formMaterial.id}`, payload)
-      else await api.post('/api/materiais', payload)
+      if (formMaterial.id) {
+        await api.patch(`/api/materiais?id=${formMaterial.id}`, payload)
+      } else {
+        await api.post('/api/materiais', payload)
+        // Lança a compra como despesa no Financeiro, se marcado
+        if (formMaterial.lancar_despesa) {
+          const valor = Number(formMaterial.valor_compra.replace(',', '.'))
+            || (Number(formMaterial.preco_kg.replace(',', '.')) || 0) * (Number(formMaterial.estoque_g) || 0) / 1000
+          if (valor > 0) {
+            await api.post('/api/lancamentos', {
+              data: new Date().toISOString().slice(0, 10),
+              descricao: `Compra de filamento — ${formMaterial.nome}`,
+              tipo: 'despesa', valor, categoria: 'materiais'
+            })
+          }
+        }
+      }
       setModalOpen(false)
       setFormMaterial(formMaterialVazio)
       reloadMat()
@@ -435,6 +450,29 @@ export function Estoque() {
               <div><Label>Estoque atual (g)</Label><Input value={formMaterial.estoque_g} onChange={e => setFormMaterial(f => ({ ...f, estoque_g: e.target.value }))} /></div>
               <div><Label>Capacidade do rolo (g)</Label><Input value={formMaterial.capacidade_g} onChange={e => setFormMaterial(f => ({ ...f, capacidade_g: e.target.value }))} /></div>
             </div>
+            {!formMaterial.id && (
+              <div className="bg-[var(--muted)] rounded-lg p-3 mb-3">
+                <label className="flex items-center gap-2 text-[13px] font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formMaterial.lancar_despesa}
+                    onChange={e => setFormMaterial(f => ({ ...f, lancar_despesa: e.target.checked }))}
+                    className="w-4 h-4"
+                  />
+                  Lançar essa compra como despesa no Financeiro
+                </label>
+                {formMaterial.lancar_despesa && (
+                  <div className="mt-2">
+                    <Label>Valor pago na compra (R$)</Label>
+                    <Input
+                      placeholder={`Deixa vazio pra calcular do preço/kg`}
+                      value={formMaterial.valor_compra}
+                      onChange={e => setFormMaterial(f => ({ ...f, valor_compra: e.target.value }))}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             <Label>Alerta de estoque baixo (g)</Label>
             <Input placeholder="Ex: 100" value={formMaterial.alerta_estoque_g} onChange={e => setFormMaterial(f => ({ ...f, alerta_estoque_g: e.target.value }))} />
             <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Send, Plus, Trash2, Save, PackageCheck, Pencil, ChevronDown } from 'lucide-react'
+import { Send, Plus, Trash2, Save, PackageCheck, Pencil, ChevronDown, Layers } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -90,6 +90,8 @@ export function Orcamento() {
   const [filtroCliente, setFiltroCliente] = useState('')
   const [limpando, setLimpando] = useState(false)
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false)
+  const [juntando, setJuntando] = useState(false)
+  const [confirmandoJuncao, setConfirmandoJuncao] = useState(false)
 
   const salvosFiltrados = useMemo(() => {
     if (!filtroCliente) return salvosApi
@@ -334,6 +336,40 @@ export function Orcamento() {
     } catch (err) {
       console.error('[Excluir orçamento] erro:', err)
       alert('Não deu pra excluir.')
+    }
+  }
+
+  /**
+   * Junta todos os orçamentos em aberto de um cliente num só.
+   * Cria um novo com todos os itens somados e apaga os antigos.
+   */
+  async function juntarOrcamentosDoCliente() {
+    const emAberto = salvosApi.filter(o => o.cliente_id === filtroCliente && !o.convertido)
+    if (emAberto.length < 2) return
+    setJuntando(true)
+    try {
+      const todosItens = emAberto.flatMap(o => o.itens)
+      const total = emAberto.reduce((s, o) => s + Number(o.valor_total), 0)
+      const base = emAberto[0]
+
+      await api.post('/api/orcamentos', {
+        cliente_id: filtroCliente,
+        itens: todosItens,
+        margem: Number(base.margem) || 0,
+        custo_energia_hora: Number(base.custo_energia_hora) || 0,
+        valor_total: total
+      })
+      for (const o of emAberto) {
+        await api.del(`/api/orcamentos?id=${o.id}`)
+      }
+      setConfirmandoJuncao(false)
+      reloadSalvos()
+      alert(`${emAberto.length} orçamentos juntados num só, com ${todosItens.length} itens.`)
+    } catch (err) {
+      console.error('[Juntar orçamentos] erro:', err)
+      alert('Não deu pra juntar. Confere o console (F12).')
+    } finally {
+      setJuntando(false)
     }
   }
 
@@ -591,6 +627,16 @@ export function Orcamento() {
                   {clientesApi.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   <option value="__sem_cliente__">Sem cliente</option>
                 </Select>
+                {filtroCliente && filtroCliente !== '__sem_cliente__' &&
+                  salvosApi.filter(o => o.cliente_id === filtroCliente && !o.convertido).length > 1 && (
+                  confirmandoJuncao ? (
+                    <InlineConfirm onCancel={() => setConfirmandoJuncao(false)} onConfirm={juntarOrcamentosDoCliente} />
+                  ) : (
+                    <Button variant="ghost" onClick={() => setConfirmandoJuncao(true)} disabled={juntando}>
+                      <Layers size={14} />{juntando ? 'Juntando...' : `Juntar ${salvosApi.filter(o => o.cliente_id === filtroCliente && !o.convertido).length} em aberto`}
+                    </Button>
+                  )
+                )}
                 {salvosApi.some(o => o.convertido) && (
                   confirmandoLimpeza ? (
                     <InlineConfirm onCancel={() => setConfirmandoLimpeza(false)} onConfirm={limparConvertidos} />

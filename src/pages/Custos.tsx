@@ -29,7 +29,7 @@ const frequencias = [
 ]
 const unidades = ['un', 'ml', 'l', 'g', 'kg', 'm', 'cm', 'par', 'pct']
 
-const formExtraVazio = { id: '', nome: '', unidade: 'un', quantidade: '', quantidade_usada: '0', custo_total: '', alerta_estoque_baixo: '0', observacoes: '' }
+const formExtraVazio = { id: '', nome: '', unidade: 'un', quantidade: '', quantidade_usada: '0', custo_total: '', alerta_estoque_baixo: '0', observacoes: '', lancar_despesa: false }
 const formOpVazio = { id: '', descricao: '', categoria: 'outros', valor: '', frequencia: 'mensal', observacoes: '' }
 
 export function Custos() {
@@ -67,7 +67,7 @@ export function Custos() {
     setFormExtra({
       id: e.id, nome: e.nome, unidade: e.unidade, quantidade: e.quantidade,
       quantidade_usada: e.quantidade_usada, custo_total: String(e.custo_total).replace('.', ','),
-      alerta_estoque_baixo: e.alerta_estoque_baixo, observacoes: e.observacoes ?? ''
+      alerta_estoque_baixo: e.alerta_estoque_baixo, observacoes: e.observacoes ?? '', lancar_despesa: false
     })
     setModalExtra(true)
   }
@@ -93,8 +93,19 @@ export function Custos() {
         alerta_estoque_baixo: Number(formExtra.alerta_estoque_baixo.replace(',', '.')) || 0,
         observacoes: formExtra.observacoes || null
       }
-      if (formExtra.id) await api.patch(`/api/custos?tipo=extras&id=${formExtra.id}`, payload)
-      else await api.post('/api/custos?tipo=extras', payload)
+      if (formExtra.id) {
+        await api.patch(`/api/custos?tipo=extras&id=${formExtra.id}`, payload)
+      } else {
+        await api.post('/api/custos?tipo=extras', payload)
+        // Lança a compra como despesa no Financeiro, se marcado
+        if (formExtra.lancar_despesa && payload.custo_total > 0) {
+          await api.post('/api/lancamentos', {
+            data: new Date().toISOString().slice(0, 10),
+            descricao: `Compra de material — ${formExtra.nome}`,
+            tipo: 'despesa', valor: payload.custo_total, categoria: 'materiais'
+          })
+        }
+      }
       setModalExtra(false)
       setFormExtra(formExtraVazio)
       reloadExtras()
@@ -335,6 +346,17 @@ export function Custos() {
           <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
             Custo unitário: {formatMoney(custoUnitarioExtra(Number(formExtra.custo_total.replace(',', '.')) || 0, Number(formExtra.quantidade.replace(',', '.')) || 0))} por {formExtra.unidade}
           </div>
+        )}
+        {!formExtra.id && (
+          <label className="flex items-center gap-2 text-[13px] font-semibold cursor-pointer bg-[var(--muted)] rounded-lg p-3 mb-3">
+            <input
+              type="checkbox"
+              checked={formExtra.lancar_despesa}
+              onChange={e => setFormExtra(f => ({ ...f, lancar_despesa: e.target.checked }))}
+              className="w-4 h-4"
+            />
+            Lançar essa compra como despesa no Financeiro
+          </label>
         )}
         <Label>Observações</Label>
         <Input placeholder="Detalhe opcional" value={formExtra.observacoes} onChange={e => setFormExtra(f => ({ ...f, observacoes: e.target.value }))} />
