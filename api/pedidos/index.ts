@@ -218,10 +218,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               const [mat] = await sql`SELECT preco_kg FROM materiais WHERE id = ${m.material_id}`
               if (mat) custoUnitario += (Number(m.peso_g) / 1000) * Number(mat.preco_kg)
             }
-            await sql`
-              INSERT INTO produtos_prontos (nome, material, quantidade, custo_unitario, preco_venda, pedido_origem_id, catalogo_produto_id)
-              VALUES (${item.nome}, ${atualizado.material ?? null}, ${item.quantidade}, ${custoUnitario}, ${item.valor_unitario}, ${id}, ${item.catalogo_produto_id ?? null})
-            `
+            // Se a peça já existe no estoque, soma na quantidade em vez de duplicar
+            const [existente] = item.catalogo_produto_id
+              ? await sql`SELECT id FROM produtos_prontos WHERE catalogo_produto_id = ${item.catalogo_produto_id} LIMIT 1`
+              : await sql`SELECT id FROM produtos_prontos WHERE catalogo_produto_id IS NULL AND lower(trim(nome)) = lower(trim(${item.nome})) LIMIT 1`
+
+            if (existente) {
+              await sql`
+                UPDATE produtos_prontos SET
+                  quantidade = quantidade + ${item.quantidade},
+                  custo_unitario = ${custoUnitario},
+                  preco_venda = ${item.valor_unitario}
+                WHERE id = ${existente.id}
+              `
+            } else {
+              await sql`
+                INSERT INTO produtos_prontos (nome, material, quantidade, custo_unitario, preco_venda, pedido_origem_id, catalogo_produto_id)
+                VALUES (${item.nome}, ${atualizado.material ?? null}, ${item.quantidade}, ${custoUnitario}, ${item.valor_unitario}, ${id}, ${item.catalogo_produto_id ?? null})
+              `
+            }
           }
           await sql`UPDATE pedidos SET produto_gerado = true WHERE id = ${id}`
         }

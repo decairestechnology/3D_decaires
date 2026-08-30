@@ -160,8 +160,14 @@ export function Estoque() {
         preco_venda: Number(formProduto.preco_venda.replace(',', '.')) || 0,
         catalogo_produto_id: formProduto.catalogo_produto_id || null
       }
-      if (formProduto.id) await api.patch(`/api/produtos-prontos?id=${formProduto.id}`, payload)
-      else await api.post('/api/produtos-prontos', payload)
+      if (formProduto.id) {
+        await api.patch(`/api/produtos-prontos?id=${formProduto.id}`, payload)
+      } else {
+        const r = await api.post<{ somado_em_existente?: boolean; quantidade: number; nome: string }>('/api/produtos-prontos', payload)
+        if (r?.somado_em_existente) {
+          alert(`Somado no estoque! "${r.nome}" agora tem ${r.quantidade} unidade(s).`)
+        }
+      }
       setModalOpen(false)
       setFormProduto(formProdutoVazio)
       reloadProd()
@@ -453,11 +459,19 @@ export function Estoque() {
               {materiais.map(m => <option key={m.id} value={m.nome}>{m.nome}</option>)}
             </Select>
             <div className="grid grid-cols-2 gap-x-4">
-              <div><Label>Quantidade</Label><Input value={formProduto.quantidade} onChange={e => setFormProduto(f => ({ ...f, quantidade: e.target.value }))} /></div>
+              <div>
+                <Label>{formProduto.id ? 'Quantidade' : 'Quantidade a adicionar'}</Label>
+                <Input value={formProduto.quantidade} onChange={e => setFormProduto(f => ({ ...f, quantidade: e.target.value }))} />
+              </div>
               <div><Label>Custo unitário (R$)</Label><Input placeholder="0,00" value={formProduto.custo_unitario} onChange={e => setFormProduto(f => ({ ...f, custo_unitario: e.target.value }))} /></div>
             </div>
             <Label>Preço de venda (R$)</Label>
             <Input placeholder="0,00" value={formProduto.preco_venda} onChange={e => setFormProduto(f => ({ ...f, preco_venda: e.target.value }))} />
+            {!formProduto.id && (
+              <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
+                Se essa peça já estiver no estoque, a quantidade é somada na que já existe — não cria linha repetida.
+              </div>
+            )}
           </>
         )}
       </Modal>

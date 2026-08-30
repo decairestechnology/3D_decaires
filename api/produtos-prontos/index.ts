@@ -24,6 +24,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     const { nome, material, quantidade, custo_unitario, preco_venda, catalogo_produto_id } = req.body
+
+    // Se esse produto já está no estoque, soma na quantidade em vez de criar linha
+    // duplicada. Casa pelo vínculo com o catálogo; sem vínculo, casa pelo nome.
+    const [existente] = catalogo_produto_id
+      ? await sql`SELECT * FROM produtos_prontos WHERE catalogo_produto_id = ${catalogo_produto_id} LIMIT 1`
+      : await sql`SELECT * FROM produtos_prontos WHERE catalogo_produto_id IS NULL AND lower(trim(nome)) = lower(trim(${nome})) LIMIT 1`
+
+    if (existente) {
+      const [somado] = await sql`
+        UPDATE produtos_prontos SET
+          quantidade = quantidade + ${quantidade},
+          custo_unitario = COALESCE(${custo_unitario}, custo_unitario),
+          preco_venda = COALESCE(${preco_venda}, preco_venda),
+          material = COALESCE(${material}, material)
+        WHERE id = ${existente.id} RETURNING *
+      `
+      return res.status(200).json({ ...somado, somado_em_existente: true })
+    }
+
     const [novo] = await sql`
       INSERT INTO produtos_prontos (nome, material, quantidade, custo_unitario, preco_venda, catalogo_produto_id)
       VALUES (${nome}, ${material}, ${quantidade}, ${custo_unitario}, ${preco_venda}, ${catalogo_produto_id ?? null})
