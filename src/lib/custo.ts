@@ -1,4 +1,4 @@
-import { carregarPreferencias } from './settings'
+import { carregarPreferencias, calcularCustoEnergia } from './settings'
 
 export interface MaterialCalc { id: string; precoKg: number }
 export interface ExtraCalc { id: string; custoUnitario: number }
@@ -33,7 +33,10 @@ export function calcularCusto(params: {
   materiais: MaterialCalc[]
   extras?: ExtraCalc[]
   margem: string
-  custoEnergiaHora: string
+  /** Tarifa em R$/kWh */
+  tarifaKwh: string
+  /** Potência da impressora em watts. Se vazio, usa a padrão das preferências. */
+  potenciaW?: string
   /** Horas de trabalho manual (acabamento, montagem). Se vazio, usa 0. */
   horasMaoObra?: string
 }): ResultadoCusto {
@@ -49,7 +52,8 @@ export function calcularCusto(params: {
     return s + num(l.quantidade) * custoUn
   }, 0)
 
-  const custoEnergia = num(params.horasImpressao) * num(params.custoEnergiaHora)
+  const potencia = num(params.potenciaW ?? '') || num(prefs.potenciaPadraoW)
+  const custoEnergia = calcularCustoEnergia(potencia, num(params.horasImpressao), num(params.tarifaKwh))
   const custoMaoObra = num(params.horasMaoObra ?? '0') * num(prefs.custoMaoObraHora)
 
   const subtotal = custoFilamento + custoExtras + custoEnergia + custoMaoObra

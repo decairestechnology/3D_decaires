@@ -58,8 +58,16 @@ export function Configuracoes() {
         <div className="text-xs font-bold text-[var(--muted-foreground)] mb-3">PADRÕES DO ORÇAMENTO</div>
         <Label>Margem de lucro padrão (%)</Label>
         <Input value={prefs.margemPadrao} onChange={e => setPrefs(p => ({ ...p, margemPadrao: e.target.value }))} />
-        <Label>Custo de energia padrão (R$/h)</Label>
-        <Input value={prefs.custoEnergiaPadrao} onChange={e => setPrefs(p => ({ ...p, custoEnergiaPadrao: e.target.value }))} />
+        <Label>Tarifa de energia (R$/kWh)</Label>
+        <Input placeholder="0,90" value={prefs.tarifaKwh} onChange={e => setPrefs(p => ({ ...p, tarifaKwh: e.target.value }))} />
+        <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
+          O valor do kWh na sua conta de luz, já com impostos e bandeira. Não é por hora — o sistema converte sozinho.
+        </div>
+        <Label>Potência média da impressora (W)</Label>
+        <Input placeholder="120" value={prefs.potenciaPadraoW} onChange={e => setPrefs(p => ({ ...p, potenciaPadraoW: e.target.value }))} />
+        <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
+          Usada quando a peça não tem impressora escolhida. Mede com um medidor de tomada durante uma impressão real — parada, a impressora consome bem menos e o número fica irreal.
+        </div>
         <Label>Custo da sua hora de trabalho (R$/h)</Label>
         <Input placeholder="0,00" value={prefs.custoMaoObraHora} onChange={e => setPrefs(p => ({ ...p, custoMaoObraHora: e.target.value }))} />
         <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">

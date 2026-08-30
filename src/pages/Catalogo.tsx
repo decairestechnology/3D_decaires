@@ -96,7 +96,7 @@ export function Catalogo() {
       horasImpressao: horasStr,
       materiais: materiaisApi.map(m => ({ id: m.id, precoKg: Number(m.preco_kg) })),
       margem: prefs.margemPadrao,
-      custoEnergiaHora: prefs.custoEnergiaPadrao
+      tarifaKwh: prefs.tarifaKwh
     })
     return r.precoUnitario > 0 ? r.precoUnitario : null
   }

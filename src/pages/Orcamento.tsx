@@ -21,6 +21,7 @@ interface CatalogoApiRow {
 }
 interface ClienteApiRow { id: string; nome: string }
 interface ExtraApiRow { id: string; nome: string; unidade: string; quantidade: string; custo_total: string }
+interface EquipApiRow { id: string; nome: string; tipo: string; potencia_w: string | null }
 
 interface MaterialSalvo { materialId: string; peso: string }
 interface ExtraSalvo { extraId: string; quantidade: string }
@@ -43,6 +44,7 @@ interface ItemOrcamento {
   horas: string
   horasMaoObra: string
   quantidade: string
+  impressoraId: string
 }
 
 function novaLinhaMaterial(): MaterialLinha {
@@ -52,7 +54,7 @@ function novaLinhaExtra(): ExtraLinha {
   return { id: crypto.randomUUID(), extraId: '', quantidade: '1' }
 }
 function novoItem(): ItemOrcamento {
-  return { id: crypto.randomUUID(), nome: '', materiais: [novaLinhaMaterial()], extras: [], horas: '6', horasMaoObra: '0', quantidade: '1' }
+  return { id: crypto.randomUUID(), nome: '', materiais: [novaLinhaMaterial()], extras: [], horas: '6', horasMaoObra: '0', quantidade: '1', impressoraId: '' }
 }
 
 export function Orcamento() {
@@ -68,12 +70,14 @@ export function Orcamento() {
   const { data: clientesApi } = useApi<ClienteApiRow[]>('/api/clientes', [])
   const { data: salvosApi, reload: reloadSalvos } = useApi<OrcamentoSalvoApiRow[]>('/api/orcamentos', [])
   const { data: extrasApi } = useApi<ExtraApiRow[]>('/api/custos?tipo=extras', [])
+  const { data: equipApi } = useApi<EquipApiRow[]>('/api/equipamentos', [])
+  const impressoras = equipApi.filter(e => e.tipo === 'impressora')
   const extrasCalc = extrasApi.map(e => ({ id: e.id, custoUnitario: custoUnitarioExtra(Number(e.custo_total), Number(e.quantidade)) }))
 
   const prefs = carregarPreferencias()
 
   const [clienteId, setClienteId] = useState('')
-  const [custoEnergiaHora, setCustoEnergiaHora] = useState(prefs.custoEnergiaPadrao)
+  const [tarifaKwh, setTarifaKwh] = useState(prefs.tarifaKwh)
   const [margem, setMargem] = useState(prefs.margemPadrao)
   const [itens, setItens] = useState<ItemOrcamento[]>([novoItem()])
   const [salvando, setSalvando] = useState(false)
@@ -95,7 +99,7 @@ export function Orcamento() {
 
   const clienteNome = clientesApi.find(c => c.id === clienteId)?.nome ?? ''
 
-  function atualizarItem(id: string, campo: 'nome' | 'horas' | 'horasMaoObra' | 'quantidade', valor: string) {
+  function atualizarItem(id: string, campo: 'nome' | 'horas' | 'horasMaoObra' | 'quantidade' | 'impressoraId', valor: string) {
     setItens(lista => lista.map(it => (it.id === id ? { ...it, [campo]: valor } : it)))
   }
   function removerItem(id: string) {
@@ -124,7 +128,8 @@ export function Orcamento() {
         materiais,
         extras: extrasCalc,
         margem,
-        custoEnergiaHora
+        tarifaKwh,
+        potenciaW: impressoras.find(i => i.id === it.impressoraId)?.potencia_w ?? undefined
       })
       const qtd = parseFloat(it.quantidade.replace(',', '.')) || 1
       const precoLinha = r.precoUnitario * qtd
@@ -144,7 +149,7 @@ export function Orcamento() {
     })
 
     return { linhas, total: linhas.reduce((s, l) => s + l.precoLinha, 0) }
-  }, [itens, materiais, extrasCalc, margem, custoEnergiaHora])
+  }, [itens, materiais, extrasCalc, margem, tarifaKwh, impressoras])
 
   function atualizarExtraLinha(itemId: string, linhaId: string, campo: 'extraId' | 'quantidade', valor: string) {
     setItens(lista => lista.map(it => it.id !== itemId ? it : {
@@ -232,7 +237,7 @@ export function Orcamento() {
         cliente_id: clienteId || null,
         itens: itensSalvos,
         margem: Number(margem.replace(',', '.')) || 0,
-        custo_energia_hora: Number(custoEnergiaHora.replace(',', '.')) || 0,
+        custo_energia_hora: Number(tarifaKwh.replace(',', '.')) || 0,
         valor_total: calculo.total
       }
       if (editandoOrcamentoId) await api.patch(`/api/orcamentos?id=${editandoOrcamentoId}`, payload)
@@ -254,7 +259,7 @@ export function Orcamento() {
     setEditandoOrcamentoId(o.id)
     setClienteId(o.cliente_id ?? '')
     setMargem(o.margem)
-    setCustoEnergiaHora(o.custo_energia_hora)
+    setTarifaKwh(o.custo_energia_hora)
     setItens(
       o.itens.length > 0
         ? o.itens.map(it => ({
@@ -265,6 +270,7 @@ export function Orcamento() {
               : [novaLinhaMaterial()],
             extras: (it.extras ?? []).map(e => ({ id: crypto.randomUUID(), extraId: e.extraId, quantidade: e.quantidade })),
             horasMaoObra: it.horasMaoObra ?? '0',
+            impressoraId: '',
             horas: it.horas ?? '6',
             quantidade: String(it.quantidade)
           }))
@@ -392,7 +398,7 @@ export function Orcamento() {
             )}
           </div>
           <div><Label>Margem de lucro (%)</Label><Input value={margem} onChange={e => setMargem(e.target.value)} /></div>
-          <div><Label>Custo energia (R$/h)</Label><Input value={custoEnergiaHora} onChange={e => setCustoEnergiaHora(e.target.value)} /></div>
+          <div><Label>Tarifa energia (R$/kWh)</Label><Input value={tarifaKwh} onChange={e => setTarifaKwh(e.target.value)} /></div>
         </div>
       </Card>
 
@@ -505,6 +511,17 @@ export function Orcamento() {
                   </>
                 )}
 
+                {impressoras.length > 0 && (
+                  <>
+                    <Label>Impressora (define a potência usada no cálculo)</Label>
+                    <Select value={it.impressoraId} onChange={e => atualizarItem(it.id, 'impressoraId', e.target.value)}>
+                      <option value="">Potência padrão ({prefs.potenciaPadraoW}W)</option>
+                      {impressoras.map(i => (
+                        <option key={i.id} value={i.id}>{i.nome}{i.potencia_w ? ` — ${i.potencia_w}W` : ' (sem potência cadastrada)'}</option>
+                      ))}
+                    </Select>
+                  </>
+                )}
                 <div className="grid grid-cols-3 gap-x-4">
                   <div><Label>Tempo impressão (h)</Label><Input value={it.horas} onChange={e => atualizarItem(it.id, 'horas', e.target.value)} /></div>
                   <div><Label>Trabalho manual (h)</Label><Input placeholder="0" value={it.horasMaoObra} onChange={e => atualizarItem(it.id, 'horasMaoObra', e.target.value)} /></div>
@@ -513,7 +530,12 @@ export function Orcamento() {
                 <div className="flex justify-between flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)] bg-[var(--muted)] rounded-lg px-3 py-2 mt-1">
                   <span>Filamento: {formatMoney(linha?.custoMaterial ?? 0)}</span>
                   {(linha?.custoExtras ?? 0) > 0 && <span>Extras: {formatMoney(linha?.custoExtras ?? 0)}</span>}
-                  <span>Energia: {formatMoney(linha?.custoEnergia ?? 0)}</span>
+                  <span title="potência × tempo ÷ 1000 × tarifa">
+                    Energia: {formatMoney(linha?.custoEnergia ?? 0)}
+                    {' '}<span className="opacity-70">
+                      ({(((Number(impressoras.find(i => i.id === it.impressoraId)?.potencia_w ?? prefs.potenciaPadraoW.replace(',', '.')) || 0) / 1000) * (parseFloat(it.horas.replace(',', '.')) || 0)).toFixed(2)} kWh)
+                    </span>
+                  </span>
                   {(linha?.custoMaoObra ?? 0) > 0 && <span>Mão de obra: {formatMoney(linha?.custoMaoObra ?? 0)}</span>}
                   {(linha?.custoManutencao ?? 0) > 0 && <span>Manutenção: {formatMoney(linha?.custoManutencao ?? 0)}</span>}
                   <span className="font-semibold">Custo/un.: {formatMoney(linha?.custoUnitario ?? 0)}</span>

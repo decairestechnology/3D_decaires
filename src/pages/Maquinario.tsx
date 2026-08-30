@@ -13,7 +13,7 @@ import { equipamentos as equipamentosMock } from '@/data/mockData'
 import { formatarDataBR, mesAno, soData } from '@/lib/date'
 
 interface EquipamentoApiRow {
-  id: string; nome: string; tipo: 'impressora' | 'ferramenta'; valor: string; aquisicao: string; status: string; vida_util_anos: number
+  id: string; nome: string; tipo: 'impressora' | 'ferramenta'; valor: string; aquisicao: string; status: string; vida_util_anos: number; potencia_w: string | null
 }
 interface AgendaApiRow { id: string; data: string; titulo: string; tipo: string; equipamento_id: string | null }
 interface EquipamentoUI { id: string; nome: string; tipo: 'impressora' | 'ferramenta'; valor: number; aquisicao: string; status: string; vidaUtilAnos: number }
@@ -32,7 +32,7 @@ function calcularDepreciacao(valor: number, aquisicao: string | null, vidaUtilAn
   return { pctDepreciado: Math.round(pctDepreciado * 100), valorAtual: valor * (1 - pctDepreciado) }
 }
 
-const formVazio = { id: '', nome: '', tipo: 'impressora', valor: '', aquisicao: '', status: 'OK', vida_util_anos: '3' }
+const formVazio = { id: '', nome: '', tipo: 'impressora', valor: '', aquisicao: '', status: 'OK', vida_util_anos: '3', potencia_w: '' }
 const formManutencaoVazio = { data: '', horario: '' }
 
 export function Maquinario() {
@@ -48,8 +48,8 @@ export function Maquinario() {
   const usandoMock = !loading && !!error
   const vazio = !loading && !error && data.length === 0
   const equipamentos = usandoMock
-    ? equipamentosMock.map(e => ({ ...e, vidaUtilAnos: 3 }))
-    : data.map(e => ({ id: e.id, nome: e.nome, tipo: e.tipo, valor: Number(e.valor), aquisicao: e.aquisicao, status: e.status, vidaUtilAnos: e.vida_util_anos ?? 3 }))
+    ? equipamentosMock.map(e => ({ ...e, vidaUtilAnos: 3, potenciaW: null as string | null }))
+    : data.map(e => ({ id: e.id, nome: e.nome, tipo: e.tipo, valor: Number(e.valor), aquisicao: e.aquisicao, status: e.status, vidaUtilAnos: e.vida_util_anos ?? 3, potenciaW: e.potencia_w }))
 
   const impressoras = equipamentos.filter(e => e.tipo === 'impressora')
   const ferramentas = equipamentos.filter(e => e.tipo === 'ferramenta')
@@ -65,7 +65,7 @@ export function Maquinario() {
 
   function abrirNovo() { setForm(formVazio); setModalOpen(true) }
   function abrirEdicao(e: typeof equipamentos[number]) {
-    setForm({ id: e.id, nome: e.nome, tipo: e.tipo, valor: String(e.valor).replace('.', ','), aquisicao: e.aquisicao?.slice(0, 10) ?? '', status: e.status, vida_util_anos: String(e.vidaUtilAnos) })
+    setForm({ id: e.id, nome: e.nome, tipo: e.tipo, valor: String(e.valor).replace('.', ','), aquisicao: e.aquisicao?.slice(0, 10) ?? '', status: e.status, vida_util_anos: String(e.vidaUtilAnos), potencia_w: e.potenciaW ?? '' })
     setModalOpen(true)
   }
 
@@ -76,7 +76,8 @@ export function Maquinario() {
     try {
       const payload = {
         nome: form.nome, tipo: form.tipo, valor: Number(form.valor.replace(',', '.')) || 0,
-        aquisicao: form.aquisicao || null, status: form.status, vida_util_anos: Number(form.vida_util_anos) || 3
+        aquisicao: form.aquisicao || null, status: form.status, vida_util_anos: Number(form.vida_util_anos) || 3,
+        potencia_w: form.potencia_w ? Number(form.potencia_w.replace(',', '.')) : null
       }
       if (form.id) await api.patch(`/api/equipamentos?id=${form.id}`, payload)
       else await api.post('/api/equipamentos', payload)
@@ -277,6 +278,15 @@ export function Maquinario() {
           <div><Label>Data de aquisição</Label><Input type="date" value={form.aquisicao} onChange={e => setForm(f => ({ ...f, aquisicao: e.target.value }))} /></div>
           <div><Label>Vida útil (anos)</Label><Input placeholder="3" value={form.vida_util_anos} onChange={e => setForm(f => ({ ...f, vida_util_anos: e.target.value }))} /></div>
         </div>
+        {form.tipo === 'impressora' && (
+          <>
+            <Label>Potência média imprimindo (W)</Label>
+            <Input placeholder="120" value={form.potencia_w} onChange={e => setForm(f => ({ ...f, potencia_w: e.target.value }))} />
+            <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
+              Mede com medidor de tomada durante uma impressão de verdade. Parada, a impressora consome bem menos e o cálculo fica irreal.
+            </div>
+          </>
+        )}
         <Label>Status</Label>
         <Input placeholder="OK" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} />
       </Modal>
