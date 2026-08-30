@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { InlineConfirm } from '@/components/ui/InlineConfirm'
+import { InlineAcao } from '@/components/ui/InlineAcao'
 import { Label, Input, Select } from '@/components/ui/Input'
 import { formatMoney } from '@/components/ui/Money'
 import { useApi } from '@/lib/useApi'
@@ -630,7 +631,13 @@ export function Orcamento() {
                 {filtroCliente && filtroCliente !== '__sem_cliente__' &&
                   salvosApi.filter(o => o.cliente_id === filtroCliente && !o.convertido).length > 1 && (
                   confirmandoJuncao ? (
-                    <InlineConfirm onCancel={() => setConfirmandoJuncao(false)} onConfirm={juntarOrcamentosDoCliente} />
+                    <InlineAcao
+                      pergunta={`Juntar ${salvosApi.filter(o => o.cliente_id === filtroCliente && !o.convertido).length} orçamentos num só?`}
+                      textoConfirmar="Juntar"
+                      icone={<Layers size={12} />}
+                      onCancel={() => setConfirmandoJuncao(false)}
+                      onConfirm={juntarOrcamentosDoCliente}
+                    />
                   ) : (
                     <Button variant="ghost" onClick={() => setConfirmandoJuncao(true)} disabled={juntando}>
                       <Layers size={14} />{juntando ? 'Juntando...' : `Juntar ${salvosApi.filter(o => o.cliente_id === filtroCliente && !o.convertido).length} em aberto`}
