@@ -219,8 +219,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               if (mat) custoUnitario += (Number(m.peso_g) / 1000) * Number(mat.preco_kg)
             }
             await sql`
-              INSERT INTO produtos_prontos (nome, material, quantidade, custo_unitario, preco_venda, pedido_origem_id)
-              VALUES (${item.nome}, ${atualizado.material ?? null}, ${item.quantidade}, ${custoUnitario}, ${item.valor_unitario}, ${id})
+              INSERT INTO produtos_prontos (nome, material, quantidade, custo_unitario, preco_venda, pedido_origem_id, catalogo_produto_id)
+              VALUES (${item.nome}, ${atualizado.material ?? null}, ${item.quantidade}, ${custoUnitario}, ${item.valor_unitario}, ${id}, ${item.catalogo_produto_id ?? null})
             `
           }
           await sql`UPDATE pedidos SET produto_gerado = true WHERE id = ${id}`

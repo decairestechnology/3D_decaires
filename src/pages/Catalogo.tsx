@@ -20,7 +20,11 @@ interface ProdutoApiRow {
   categoria: string | null; materiais_padrao: MaterialPadrao[] | null
 }
 interface MaterialApiRow { id: string; nome: string; preco_kg: string }
-interface PedidoApiRow { catalogo_produto_id: string | null }
+interface ItemPedido { catalogo_produto_id?: string | null; quantidade: number }
+interface PedidoApiRow {
+  catalogo_produto_id: string | null
+  itens: ItemPedido[] | null
+}
 
 interface LinhaMaterial { id: string; material_id: string; peso_g: string }
 function novaLinhaMaterial(): LinhaMaterial { return { id: crypto.randomUUID(), material_id: '', peso_g: '' } }
@@ -57,8 +61,19 @@ export function Catalogo() {
   const vazio = !loading && !error && data.length === 0
   const produtos = usandoMock ? [] : data
 
+  /**
+   * Quantas unidades desse produto já foram pedidas. Varre os itens de cada pedido
+   * (formato novo) e cai no campo antigo pra pedidos de antes do multi-item.
+   */
   function contagemUso(produtoId: string) {
-    return pedidosApi.filter(p => p.catalogo_produto_id === produtoId).length
+    return pedidosApi.reduce((total, p) => {
+      if (p.itens && p.itens.length > 0) {
+        return total + p.itens
+          .filter(i => i.catalogo_produto_id === produtoId)
+          .reduce((s, i) => s + (Number(i.quantidade) || 1), 0)
+      }
+      return total + (p.catalogo_produto_id === produtoId ? 1 : 0)
+    }, 0)
   }
 
   function nomesMateriais(p: ProdutoApiRow) {

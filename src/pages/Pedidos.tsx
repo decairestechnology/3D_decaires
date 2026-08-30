@@ -65,7 +65,7 @@ interface CatalogoApiRow {
   peso_padrao_g: string | null; preco_padrao: string | null; ativo: boolean
   materiais_padrao: MaterialUsado[] | null; link_arquivo: string | null
 }
-interface ProntoApiRow { id: string; nome: string; quantidade: number; preco_venda: string; material: string | null }
+interface ProntoApiRow { id: string; nome: string; quantidade: number; preco_venda: string; material: string | null; catalogo_produto_id: string | null }
 
 // ---- Estrutura do formulário (usa string pra facilitar digitação)
 interface LinhaMaterialForm { id: string; material_id: string; peso_g: string }
@@ -224,7 +224,8 @@ export function Pedidos() {
       ...i,
       origem: 'estoque',
       produto_pronto_id: pronto.id,
-      catalogo_produto_id: '',
+      // herda o vínculo do catálogo pra venda contar no "Vendidos" do produto
+      catalogo_produto_id: pronto.catalogo_produto_id ?? '',
       nome: pronto.nome,
       valor_unitario: String(pronto.preco_venda).replace('.', ','),
       materiais: [novaLinhaMaterial()]

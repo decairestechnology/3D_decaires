@@ -23,22 +23,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { nome, material, quantidade, custo_unitario, preco_venda } = req.body
+    const { nome, material, quantidade, custo_unitario, preco_venda, catalogo_produto_id } = req.body
     const [novo] = await sql`
-      INSERT INTO produtos_prontos (nome, material, quantidade, custo_unitario, preco_venda)
-      VALUES (${nome}, ${material}, ${quantidade}, ${custo_unitario}, ${preco_venda})
+      INSERT INTO produtos_prontos (nome, material, quantidade, custo_unitario, preco_venda, catalogo_produto_id)
+      VALUES (${nome}, ${material}, ${quantidade}, ${custo_unitario}, ${preco_venda}, ${catalogo_produto_id ?? null})
       RETURNING *
     `
     return res.status(201).json(novo)
   }
 
   if (req.method === 'PATCH' && id) {
-    const { nome, material, quantidade, custo_unitario, preco_venda } = req.body
+    const { nome, material, quantidade, custo_unitario, preco_venda, catalogo_produto_id } = req.body
     const [atualizado] = await sql`
       UPDATE produtos_prontos SET
         nome = COALESCE(${nome}, nome), material = COALESCE(${material}, material),
         quantidade = COALESCE(${quantidade}, quantidade), custo_unitario = COALESCE(${custo_unitario}, custo_unitario),
-        preco_venda = COALESCE(${preco_venda}, preco_venda)
+        preco_venda = COALESCE(${preco_venda}, preco_venda),
+        catalogo_produto_id = COALESCE(${catalogo_produto_id}, catalogo_produto_id)
       WHERE id = ${id} RETURNING *
     `
     if (!atualizado) return res.status(404).json({ error: 'Produto não encontrado' })

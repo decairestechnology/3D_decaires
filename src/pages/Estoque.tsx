@@ -13,7 +13,12 @@ import { formatarDataBR } from '@/lib/date'
 import { materiais as materiaisMock, produtosProntos as produtosMock } from '@/data/mockData'
 
 interface MaterialApiRow { id: string; nome: string; preco_kg: string; estoque_g: string; capacidade_g: string; alerta_estoque_g: string | null; marca: string | null }
-interface ProdutoApiRow { id: string; nome: string; material: string | null; quantidade: number; custo_unitario: string; preco_venda: string }
+interface ProdutoApiRow { id: string; nome: string; material: string | null; quantidade: number; custo_unitario: string; preco_venda: string; catalogo_produto_id: string | null }
+interface CatalogoApiRow {
+  id: string; codigo: string; nome: string; preco_padrao: string | null
+  materiais_padrao: { material_id: string; peso_g: number }[] | null
+  material_id: string | null; peso_padrao_g: string | null; ativo: boolean
+}
 interface PerdaApiRow { id: string; peso_perdido_g: string; motivo: string | null; custo: string | null; data: string; material_id: string | null; material_nome: string | null }
 
 function statusMaterial(pct: number, estoqueG?: number, alertaG?: number | null): { color: 'red' | 'amber' | 'green'; label: string; bar: string } {
@@ -29,7 +34,7 @@ function statusMaterial(pct: number, estoqueG?: number, alertaG?: number | null)
 }
 
 const formMaterialVazio = { id: '', nome: '', marca: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000', alerta_estoque_g: '' }
-const formProdutoVazio = { id: '', nome: '', material: '', quantidade: '1', custo_unitario: '', preco_venda: '' }
+const formProdutoVazio = { id: '', nome: '', material: '', quantidade: '1', custo_unitario: '', preco_venda: '', catalogo_produto_id: '' }
 const formPerdaVazio = { id: '', material_id: '', peso_perdido_g: '', motivo: '', custo: '', data: '' }
 
 export function Estoque() {
@@ -45,6 +50,8 @@ export function Estoque() {
   const { data: matApi, loading: matLoading, error: matError, reload: reloadMat } = useApi<MaterialApiRow[]>('/api/materiais', [])
   const { data: prodApi, loading: prodLoading, error: prodError, reload: reloadProd } = useApi<ProdutoApiRow[]>('/api/produtos-prontos', [])
   const { data: perdasApi, loading: perdasLoading, error: perdasError, reload: reloadPerdas } = useApi<PerdaApiRow[]>('/api/perdas', [])
+  const { data: catalogoData } = useApi<CatalogoApiRow[]>('/api/catalogo', [])
+  const catalogoApi = catalogoData.filter(p => p.ativo)
 
   const matMock = !matLoading && !!matError
   const matVazio = !matLoading && !matError && matApi.length === 0
@@ -55,8 +62,8 @@ export function Estoque() {
   const prodMock = !prodLoading && !!prodError
   const prodVazio = !prodLoading && !prodError && prodApi.length === 0
   const produtos = prodMock
-    ? produtosMock
-    : prodApi.map(p => ({ id: p.id, nome: p.nome, material: p.material ?? '', quantidade: p.quantidade, custoUnitario: Number(p.custo_unitario), precoVenda: Number(p.preco_venda) }))
+    ? produtosMock.map(p => ({ ...p, catalogoProdutoId: null as string | null }))
+    : prodApi.map(p => ({ id: p.id, nome: p.nome, material: p.material ?? '', quantidade: p.quantidade, custoUnitario: Number(p.custo_unitario), precoVenda: Number(p.preco_venda), catalogoProdutoId: p.catalogo_produto_id }))
 
   const perdasMock = !perdasLoading && !!perdasError
   const perdasVazio = !perdasLoading && !perdasError && perdasApi.length === 0
@@ -79,9 +86,32 @@ export function Estoque() {
     setModalOpen(true)
   }
   function abrirEdicaoProduto(p: typeof produtos[number]) {
-    setFormProduto({ id: p.id, nome: p.nome, material: p.material, quantidade: String(p.quantidade), custo_unitario: String(p.custoUnitario).replace('.', ','), preco_venda: String(p.precoVenda).replace('.', ',') })
+    setFormProduto({ id: p.id, nome: p.nome, material: p.material, quantidade: String(p.quantidade), custo_unitario: String(p.custoUnitario).replace('.', ','), preco_venda: String(p.precoVenda).replace('.', ','), catalogo_produto_id: p.catalogoProdutoId ?? '' })
     setModalOpen(true)
   }
+  /** Escolher do catálogo preenche nome, material, custo e preço automaticamente. */
+  function aplicarCatalogo(catalogoId: string) {
+    if (!catalogoId) { setFormProduto(f => ({ ...f, catalogo_produto_id: '' })); return }
+    const prod = catalogoApi.find(p => p.id === catalogoId)
+    if (!prod) return
+    const linhas = prod.materiais_padrao && prod.materiais_padrao.length > 0
+      ? prod.materiais_padrao
+      : (prod.material_id && prod.peso_padrao_g ? [{ material_id: prod.material_id, peso_g: Number(prod.peso_padrao_g) }] : [])
+    const nomesMat = linhas.map(l => materiais.find(m => m.id === l.material_id)?.nome).filter(Boolean).join(' + ')
+    const custo = linhas.reduce((s, l) => {
+      const precoKg = materiais.find(m => m.id === l.material_id)?.precoKg ?? 0
+      return s + (Number(l.peso_g) / 1000) * precoKg
+    }, 0)
+    setFormProduto(f => ({
+      ...f,
+      catalogo_produto_id: prod.id,
+      nome: prod.nome,
+      material: nomesMat || f.material,
+      custo_unitario: custo > 0 ? custo.toFixed(2).replace('.', ',') : f.custo_unitario,
+      preco_venda: prod.preco_padrao ? String(prod.preco_padrao).replace('.', ',') : f.preco_venda
+    }))
+  }
+
   function abrirNovaPerda() {
     setFormPerda({ ...formPerdaVazio, material_id: materiais[0]?.id ?? '' })
     setModalPerdaOpen(true)
@@ -127,7 +157,8 @@ export function Estoque() {
         material: formProduto.material || null,
         quantidade: Number(formProduto.quantidade) || 0,
         custo_unitario: Number(formProduto.custo_unitario.replace(',', '.')) || 0,
-        preco_venda: Number(formProduto.preco_venda.replace(',', '.')) || 0
+        preco_venda: Number(formProduto.preco_venda.replace(',', '.')) || 0,
+        catalogo_produto_id: formProduto.catalogo_produto_id || null
       }
       if (formProduto.id) await api.patch(`/api/produtos-prontos?id=${formProduto.id}`, payload)
       else await api.post('/api/produtos-prontos', payload)
@@ -406,6 +437,14 @@ export function Estoque() {
           </>
         ) : (
           <>
+            <Label>Produto do catálogo</Label>
+            <Select value={formProduto.catalogo_produto_id} onChange={e => aplicarCatalogo(e.target.value)}>
+              <option value="">Digitar manualmente...</option>
+              {catalogoApi.map(p => <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>)}
+            </Select>
+            <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
+              Escolhendo do catálogo, a venda dessa peça conta no "Vendidos" do produto e o preço vem preenchido.
+            </div>
             <Label>Nome do produto</Label>
             <Input placeholder="Ex: Suporte de celular" value={formProduto.nome} onChange={e => setFormProduto(f => ({ ...f, nome: e.target.value }))} />
             <Label>Material</Label>
