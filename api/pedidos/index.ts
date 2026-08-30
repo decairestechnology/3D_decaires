@@ -71,6 +71,110 @@ function valorTotal(itens: ItemPedido[]): number {
   return itens.reduce((s, i) => s + Number(i.valor_unitario) * Number(i.quantidade || 1), 0)
 }
 
+
+/**
+ * Roda as automações de mudança de status. Fica numa função separada porque
+ * precisa valer tanto pro PATCH (avançar fase) quanto pro POST (criar pedido
+ * já com status adiantado) — antes só o PATCH rodava, e pedido criado direto
+ * como "Entregue" não baixava estoque nem lançava receita.
+ */
+async function rodarAutomacoes(pedidoId: string, statusNovo: string) {
+  const [p] = await sql`
+    SELECT id, numero, cliente_id, status, valor, material, itens, materiais_usados,
+      material_id, peso_filamento_g, peca,
+      material_debitado, produto_gerado, receita_lancada, estoque_pronto_baixado
+    FROM pedidos WHERE id = ${pedidoId}
+  `
+  if (!p) return
+
+  // ---- Em produção: abate o filamento de tudo que precisa ser impresso
+  if (statusNovo === 'producao' && !p.material_debitado) {
+    const aDebitar = filamentoAProduzir(itensDoPedido(p))
+    if (aDebitar.length > 0) {
+      for (const m of aDebitar) {
+        await sql`UPDATE materiais SET estoque_g = estoque_g - ${m.peso_g} WHERE id = ${m.material_id}`
+      }
+      await sql`UPDATE pedidos SET material_debitado = true WHERE id = ${pedidoId}`
+    }
+  }
+
+  if (statusNovo !== 'entregue') return
+
+  const listaEntrega = itensDoPedido(p)
+  const [cliente] = await sql`SELECT nome FROM clientes WHERE id = ${p.cliente_id}`
+  const producaoInterna = !!cliente && cliente.nome.toLowerCase().trim() === 'decaires 3d'
+
+  // ---- Pedido que pulou a fase de produção: abate o filamento agora
+  if (!p.material_debitado) {
+    const aDebitar = filamentoAProduzir(listaEntrega)
+    if (aDebitar.length > 0) {
+      for (const m of aDebitar) {
+        await sql`UPDATE materiais SET estoque_g = estoque_g - ${m.peso_g} WHERE id = ${m.material_id}`
+      }
+      await sql`UPDATE pedidos SET material_debitado = true WHERE id = ${pedidoId}`
+    }
+  }
+
+  // ---- Baixa do estoque de produtos prontos (itens de pronta entrega)
+  if (!p.estoque_pronto_baixado) {
+    const doEstoque = listaEntrega.filter(i => i.origem === 'estoque' && i.produto_pronto_id)
+    for (const item of doEstoque) {
+      await sql`
+        UPDATE produtos_prontos SET quantidade = GREATEST(quantidade - ${item.quantidade}, 0)
+        WHERE id = ${item.produto_pronto_id}
+      `
+    }
+    if (doEstoque.length > 0) {
+      await sql`UPDATE pedidos SET estoque_pronto_baixado = true WHERE id = ${pedidoId}`
+    }
+  }
+
+  // ---- Produção pro estoque próprio: cliente "DeCaires 3D" vira produto pronto
+  if (!p.produto_gerado && producaoInterna) {
+    for (const item of listaEntrega) {
+      if (item.origem === 'estoque') continue
+      let custoUnitario = 0
+      for (const m of item.materiais ?? []) {
+        const [mat] = await sql`SELECT preco_kg FROM materiais WHERE id = ${m.material_id}`
+        if (mat) custoUnitario += (Number(m.peso_g) / 1000) * Number(mat.preco_kg)
+      }
+      // Se a peça já existe no estoque, soma na quantidade em vez de duplicar
+      const [existente] = item.catalogo_produto_id
+        ? await sql`SELECT id FROM produtos_prontos WHERE catalogo_produto_id = ${item.catalogo_produto_id} LIMIT 1`
+        : await sql`SELECT id FROM produtos_prontos WHERE catalogo_produto_id IS NULL AND lower(trim(nome)) = lower(trim(${item.nome})) LIMIT 1`
+
+      if (existente) {
+        await sql`
+          UPDATE produtos_prontos SET
+            quantidade = quantidade + ${item.quantidade},
+            custo_unitario = ${custoUnitario},
+            preco_venda = ${item.valor_unitario}
+          WHERE id = ${existente.id}
+        `
+      } else {
+        await sql`
+          INSERT INTO produtos_prontos (nome, material, quantidade, custo_unitario, preco_venda, pedido_origem_id, catalogo_produto_id)
+          VALUES (${item.nome}, ${p.material ?? null}, ${item.quantidade}, ${custoUnitario}, ${item.valor_unitario}, ${pedidoId}, ${item.catalogo_produto_id ?? null})
+        `
+      }
+    }
+    await sql`UPDATE pedidos SET produto_gerado = true WHERE id = ${pedidoId}`
+  }
+
+  // ---- Receita automática no Financeiro (só uma vez, e só se não for produção interna)
+  if (!p.receita_lancada && !producaoInterna && Number(p.valor) > 0) {
+    await sql`
+      INSERT INTO lancamentos_financeiros (data, descricao, tipo, valor, categoria, pedido_id)
+      VALUES (
+        ${new Date().toISOString().slice(0, 10)},
+        ${`Venda — ${cliente?.nome ?? 'cliente'} (pedido #${p.numero})`},
+        'receita', ${p.valor}, 'vendas', ${pedidoId}
+      )
+    `
+    await sql`UPDATE pedidos SET receita_lancada = true WHERE id = ${pedidoId}`
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store')
   const id = pegarId(req)
@@ -124,7 +228,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
       RETURNING *
     `
-    return res.status(201).json(novo)
+    // Pedido pode ser criado já como "Em produção" ou "Entregue" — roda as
+    // automações na hora, senão o estoque e o financeiro não acompanham.
+    await rodarAutomacoes(novo.id, novo.status)
+    const [comAutomacao] = await sql`SELECT * FROM pedidos WHERE id = ${novo.id}`
+    return res.status(201).json(comAutomacao ?? novo)
   }
 
   if (req.method === 'PATCH' && id) {
@@ -179,86 +287,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sql`UPDATE pedidos SET material_debitado = false WHERE id = ${id}`
     }
 
-    // ---- Em produção: abate o filamento de tudo que precisa ser impresso
-    if (status === 'producao' && !atualizado.material_debitado) {
-      const aDebitar = filamentoAProduzir(itensDoPedido(atualizado))
-      if (aDebitar.length > 0) {
-        for (const m of aDebitar) {
-          await sql`UPDATE materiais SET estoque_g = estoque_g - ${m.peso_g} WHERE id = ${m.material_id}`
-        }
-        await sql`UPDATE pedidos SET material_debitado = true WHERE id = ${id}`
-      }
-    }
-
-    if (status === 'entregue') {
-      const listaEntrega = itensDoPedido(atualizado)
-
-      // ---- Baixa do estoque de produtos prontos (itens de pronta entrega)
-      if (!atualizado.estoque_pronto_baixado) {
-        const doEstoque = listaEntrega.filter(i => i.origem === 'estoque' && i.produto_pronto_id)
-        for (const item of doEstoque) {
-          await sql`
-            UPDATE produtos_prontos SET quantidade = GREATEST(quantidade - ${item.quantidade}, 0)
-            WHERE id = ${item.produto_pronto_id}
-          `
-        }
-        if (doEstoque.length > 0) {
-          await sql`UPDATE pedidos SET estoque_pronto_baixado = true WHERE id = ${id}`
-        }
-      }
-
-      // ---- Produção pro estoque próprio: cliente "DeCaires 3D" vira produto pronto
-      if (!atualizado.produto_gerado) {
-        const [cliente] = await sql`SELECT nome FROM clientes WHERE id = ${atualizado.cliente_id}`
-        if (cliente && cliente.nome.toLowerCase().trim() === 'decaires 3d') {
-          for (const item of listaEntrega) {
-            if (item.origem === 'estoque') continue
-            let custoUnitario = 0
-            for (const m of item.materiais ?? []) {
-              const [mat] = await sql`SELECT preco_kg FROM materiais WHERE id = ${m.material_id}`
-              if (mat) custoUnitario += (Number(m.peso_g) / 1000) * Number(mat.preco_kg)
-            }
-            // Se a peça já existe no estoque, soma na quantidade em vez de duplicar
-            const [existente] = item.catalogo_produto_id
-              ? await sql`SELECT id FROM produtos_prontos WHERE catalogo_produto_id = ${item.catalogo_produto_id} LIMIT 1`
-              : await sql`SELECT id FROM produtos_prontos WHERE catalogo_produto_id IS NULL AND lower(trim(nome)) = lower(trim(${item.nome})) LIMIT 1`
-
-            if (existente) {
-              await sql`
-                UPDATE produtos_prontos SET
-                  quantidade = quantidade + ${item.quantidade},
-                  custo_unitario = ${custoUnitario},
-                  preco_venda = ${item.valor_unitario}
-                WHERE id = ${existente.id}
-              `
-            } else {
-              await sql`
-                INSERT INTO produtos_prontos (nome, material, quantidade, custo_unitario, preco_venda, pedido_origem_id, catalogo_produto_id)
-                VALUES (${item.nome}, ${atualizado.material ?? null}, ${item.quantidade}, ${custoUnitario}, ${item.valor_unitario}, ${id}, ${item.catalogo_produto_id ?? null})
-              `
-            }
-          }
-          await sql`UPDATE pedidos SET produto_gerado = true WHERE id = ${id}`
-        }
-      }
-
-      // ---- Receita automática no Financeiro (só uma vez, e só se não for produção interna)
-      if (!atualizado.receita_lancada) {
-        const [cliente] = await sql`SELECT nome FROM clientes WHERE id = ${atualizado.cliente_id}`
-        const producaoInterna = cliente && cliente.nome.toLowerCase().trim() === 'decaires 3d'
-        if (!producaoInterna && Number(atualizado.valor) > 0) {
-          await sql`
-            INSERT INTO lancamentos_financeiros (data, descricao, tipo, valor, categoria, pedido_id)
-            VALUES (
-              ${new Date().toISOString().slice(0, 10)},
-              ${`Venda — ${cliente?.nome ?? 'cliente'} (pedido #${atualizado.numero})`},
-              'receita', ${atualizado.valor}, 'vendas', ${id}
-            )
-          `
-          await sql`UPDATE pedidos SET receita_lancada = true WHERE id = ${id}`
-        }
-      }
-    }
+    // Estoque, produto pronto e receita — mesma lógica usada no POST.
+    if (status) await rodarAutomacoes(id, status)
 
     return res.status(200).json(atualizado)
   }
