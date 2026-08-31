@@ -29,6 +29,8 @@ interface ExtraSalvo { extraId: string; quantidade: string }
 interface ItemSalvo {
   nome: string; materiais: MaterialSalvo[]; extras?: ExtraSalvo[]; horas: string
   horasMaoObra?: string; quantidade: number; custoUnitario: number; valor: number
+  /** Margem usada nessa peça. Peças antigas não têm — aí cai na margem do orçamento. */
+  margem?: string
 }
 interface OrcamentoSalvoApiRow {
   id: string; cliente_id: string | null; cliente_nome: string | null
@@ -46,6 +48,7 @@ interface ItemOrcamento {
   horasMaoObra: string
   quantidade: string
   impressoraId: string
+  margem: string
 }
 
 function novaLinhaMaterial(): MaterialLinha {
@@ -54,8 +57,8 @@ function novaLinhaMaterial(): MaterialLinha {
 function novaLinhaExtra(): ExtraLinha {
   return { id: crypto.randomUUID(), extraId: '', quantidade: '1' }
 }
-function novoItem(): ItemOrcamento {
-  return { id: crypto.randomUUID(), nome: '', materiais: [novaLinhaMaterial()], extras: [], horas: '6', horasMaoObra: '0', quantidade: '1', impressoraId: '' }
+function novoItem(margemPadrao = '60'): ItemOrcamento {
+  return { id: crypto.randomUUID(), nome: '', materiais: [novaLinhaMaterial()], extras: [], horas: '6', horasMaoObra: '0', quantidade: '1', impressoraId: '', margem: margemPadrao }
 }
 
 export function Orcamento() {
@@ -80,7 +83,7 @@ export function Orcamento() {
   const [clienteId, setClienteId] = useState('')
   const [tarifaKwh, setTarifaKwh] = useState(prefs.tarifaKwh)
   const [margem, setMargem] = useState(prefs.margemPadrao)
-  const [itens, setItens] = useState<ItemOrcamento[]>([novoItem()])
+  const [itens, setItens] = useState<ItemOrcamento[]>([novoItem(prefs.margemPadrao)])
   const [salvando, setSalvando] = useState(false)
   const [convertendoId, setConvertendoId] = useState<string | null>(null)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
@@ -102,7 +105,7 @@ export function Orcamento() {
 
   const clienteNome = clientesApi.find(c => c.id === clienteId)?.nome ?? ''
 
-  function atualizarItem(id: string, campo: 'nome' | 'horas' | 'horasMaoObra' | 'quantidade' | 'impressoraId', valor: string) {
+  function atualizarItem(id: string, campo: 'nome' | 'horas' | 'horasMaoObra' | 'quantidade' | 'impressoraId' | 'margem', valor: string) {
     setItens(lista => lista.map(it => (it.id === id ? { ...it, [campo]: valor } : it)))
   }
   function removerItem(id: string) {
@@ -130,7 +133,7 @@ export function Orcamento() {
         horasMaoObra: it.horasMaoObra,
         materiais,
         extras: extrasCalc,
-        margem,
+        margem: it.margem || margem,
         tarifaKwh,
         potenciaW: impressoras.find(i => i.id === it.impressoraId)?.potencia_w ?? undefined
       })
@@ -223,6 +226,53 @@ export function Orcamento() {
     setTimeout(() => janela.print(), 300)
   }
 
+  /** Gera o PDF direto de um orçamento salvo, sem precisar recarregar no montador. */
+  function gerarPdfDeSalvo(o: OrcamentoSalvoApiRow) {
+    const janela = window.open('', '_blank', 'width=650,height=800')
+    if (!janela) return
+    const linhasHtml = o.itens
+      .map(it => `<tr><td>${it.nome || 'Peça personalizada'}</td><td>${it.quantidade}</td><td>${formatMoney(it.valor)}</td></tr>`)
+      .join('')
+    janela.document.write(`
+      <html>
+        <head>
+          <title>Orçamento</title>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; color: #0F172A; }
+            .logo { width: 56px; height: 56px; margin-bottom: 8px; }
+            h1 { font-size: 20px; margin: 0 0 2px 0; }
+            .sub { color: #64748B; font-size: 13px; margin-bottom: 28px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+            th { text-align: left; font-size: 11px; color: #64748B; padding: 6px 0; border-bottom: 1px solid #E2E8F0; }
+            td { padding: 8px 0; border-bottom: 1px solid #E2E8F0; font-size: 14px; }
+            .total { background: #E0F9FF; border-radius: 10px; padding: 16px 20px; margin-top: 8px; }
+            .total .label { font-size: 12px; color: #64748B; font-weight: 600; }
+            .total .valor { font-size: 26px; font-weight: 800; color: #7C3AED; }
+            .footer { margin-top: 40px; font-size: 11px; color: #94A3B8; }
+          </style>
+        </head>
+        <body>
+          <img class="logo" src="${window.location.origin}/logo.png" />
+          <h1>DeCaires 3D — Orçamento</h1>
+          <div class="sub">${formatarDataBR(o.criado_em)}${o.cliente_nome ? ' · ' + o.cliente_nome : ''}</div>
+          <table>
+            <tr><th>Peça</th><th>Qtd</th><th>Valor</th></tr>
+            ${linhasHtml}
+          </table>
+          <div class="total">
+            <div class="label">VALOR TOTAL</div>
+            <div class="valor">${formatMoney(Number(o.valor_total))}</div>
+          </div>
+          <div class="footer">Orçamento gerado por DeCaires 3D. Válido por 7 dias — sujeito a alteração conforme detalhes finais da peça.</div>
+        </body>
+      </html>
+    `)
+    janela.document.close()
+    janela.focus()
+    setTimeout(() => janela.print(), 300)
+  }
+
   async function salvarOrcamento() {
     setSalvando(true)
     try {
@@ -232,6 +282,7 @@ export function Orcamento() {
         extras: l.item.extras.filter(e => e.extraId).map(e => ({ extraId: e.extraId, quantidade: e.quantidade })),
         horas: l.item.horas,
         horasMaoObra: l.item.horasMaoObra,
+        margem: l.item.margem,
         quantidade: l.qtd,
         custoUnitario: l.custoUnitario,
         valor: l.precoLinha
@@ -248,7 +299,7 @@ export function Orcamento() {
       reloadSalvos()
       setEditandoOrcamentoId(null)
       setClienteId('')
-      setItens([novoItem()])
+      setItens([novoItem(margem)])
       alert(editandoOrcamentoId ? 'Orçamento atualizado!' : 'Orçamento salvo! Ele aparece na lista abaixo — dá pra transformar em pedido quando o cliente aprovar.')
     } catch (err) {
       console.error('[Salvar orçamento] erro:', err)
@@ -274,10 +325,11 @@ export function Orcamento() {
             extras: (it.extras ?? []).map(e => ({ id: crypto.randomUUID(), extraId: e.extraId, quantidade: e.quantidade })),
             horasMaoObra: it.horasMaoObra ?? '0',
             impressoraId: '',
+            margem: it.margem ?? o.margem,
             horas: it.horas ?? '6',
             quantidade: String(it.quantidade)
           }))
-        : [novoItem()]
+        : [novoItem(margem)]
     )
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -434,7 +486,7 @@ export function Orcamento() {
               <div className="text-xs text-[var(--muted-foreground)] -mt-2">Nenhum cliente cadastrado ainda — pode salvar sem cliente e vincular depois, ou cadastra um em Clientes.</div>
             )}
           </div>
-          <div><Label>Margem de lucro (%)</Label><Input value={margem} onChange={e => setMargem(e.target.value)} /></div>
+          <div><Label>Margem padrão pra novas peças (%)</Label><Input value={margem} onChange={e => setMargem(e.target.value)} /></div>
           <div><Label>Tarifa energia (R$/kWh)</Label><Input value={tarifaKwh} onChange={e => setTarifaKwh(e.target.value)} /></div>
         </div>
       </Card>
@@ -564,6 +616,8 @@ export function Orcamento() {
                   <div><Label>Trabalho manual (h)</Label><Input placeholder="0" value={it.horasMaoObra} onChange={e => atualizarItem(it.id, 'horasMaoObra', e.target.value)} /></div>
                   <div><Label>Quantidade</Label><Input value={it.quantidade} onChange={e => atualizarItem(it.id, 'quantidade', e.target.value)} /></div>
                 </div>
+                <Label>Margem de lucro desta peça (%)</Label>
+                <Input value={it.margem} onChange={e => atualizarItem(it.id, 'margem', e.target.value)} />
                 <div className="flex justify-between flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--muted-foreground)] bg-[var(--muted)] rounded-lg px-3 py-2 mt-1">
                   <span>Filamento: {formatMoney(linha?.custoMaterial ?? 0)}</span>
                   {(linha?.custoExtras ?? 0) > 0 && <span>Extras: {formatMoney(linha?.custoExtras ?? 0)}</span>}
@@ -582,7 +636,7 @@ export function Orcamento() {
               </Card>
             )
           })}
-          <Button variant="ghost" onClick={() => setItens(l => [...l, novoItem()])}><Plus size={15} />Adicionar outra peça</Button>
+          <Button variant="ghost" onClick={() => setItens(l => [...l, novoItem(margem)])}><Plus size={15} />Adicionar outra peça</Button>
         </div>
 
         <Card className="flex-1 min-w-[280px] sticky top-4">
@@ -605,7 +659,7 @@ export function Orcamento() {
             <Save size={15} />{salvando ? 'Salvando...' : editandoOrcamentoId ? 'Atualizar orçamento' : 'Salvar orçamento'}
           </Button>
           {editandoOrcamentoId && (
-            <Button variant="ghost" className="w-full mt-2" onClick={() => { setEditandoOrcamentoId(null); setClienteId(''); setItens([novoItem()]) }}>
+            <Button variant="ghost" className="w-full mt-2" onClick={() => { setEditandoOrcamentoId(null); setClienteId(''); setItens([novoItem(margem)]) }}>
               Cancelar edição
             </Button>
           )}
@@ -701,13 +755,21 @@ export function Orcamento() {
                       {confirmandoId === o.id ? (
                         <InlineConfirm onCancel={() => setConfirmandoId(null)} onConfirm={() => excluirSalvo(o.id)} />
                       ) : o.convertido ? (
-                        <Badge color="green">Virou pedido</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge color="green">Virou pedido</Badge>
+                          <button onClick={() => gerarPdfDeSalvo(o)} title="Gerar PDF" className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]">
+                            <Send size={13} />
+                          </button>
+                        </div>
                       ) : (
                         <div className="flex items-center gap-2">
                           <Button variant="ghost" onClick={() => virarPedido(o)} disabled={convertendoId === o.id}>
                             <PackageCheck size={14} />{convertendoId === o.id ? 'Convertendo...' : 'Virar pedido'}
                           </Button>
-                          <button onClick={() => editarOrcamentoSalvo(o)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]">
+                          <button onClick={() => gerarPdfDeSalvo(o)} title="Gerar PDF" className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]">
+                            <Send size={13} />
+                          </button>
+                          <button onClick={() => editarOrcamentoSalvo(o)} title="Editar" className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-[var(--muted)]">
                             <Pencil size={13} />
                           </button>
                           <button onClick={() => setConfirmandoId(o.id)} className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600">
