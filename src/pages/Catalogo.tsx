@@ -18,7 +18,10 @@ interface ProdutoApiRow {
   peso_padrao_g: string | null; tempo_impressao_h: string | null; preco_padrao: string | null
   descricao: string | null; ativo: boolean; imagem_url: string | null; link_arquivo: string | null
   categoria: string | null; materiais_padrao: MaterialPadrao[] | null
+  extras_padrao: ExtraPadrao[] | null; custo_producao: string | null
 }
+interface ExtraPadrao { extra_id: string; quantidade: number }
+interface ExtraApiRow { id: string; nome: string; unidade: string; quantidade: string; custo_total: string }
 interface MaterialApiRow { id: string; nome: string; preco_kg: string }
 interface ItemPedido { catalogo_produto_id?: string | null; quantidade: number }
 interface PedidoApiRow {
@@ -27,7 +30,9 @@ interface PedidoApiRow {
 }
 
 interface LinhaMaterial { id: string; material_id: string; peso_g: string }
+interface LinhaExtra { id: string; extra_id: string; quantidade: string }
 function novaLinhaMaterial(): LinhaMaterial { return { id: crypto.randomUUID(), material_id: '', peso_g: '' } }
+function novaLinhaExtra(): LinhaExtra { return { id: crypto.randomUUID(), extra_id: '', quantidade: '1' } }
 
 const formVazio = { id: '', codigo: '', nome: '', tempo_impressao_h: '', preco_padrao: '', descricao: '', imagem_url: '', link_arquivo: '', categoria: '' }
 
@@ -46,11 +51,15 @@ export function Catalogo() {
   const { data, loading, error, reload } = useApi<ProdutoApiRow[]>('/api/catalogo', [])
   const { data: materiaisApi } = useApi<MaterialApiRow[]>('/api/materiais', [])
   const { data: pedidosApi } = useApi<PedidoApiRow[]>('/api/pedidos', [])
+  const { data: extrasApi } = useApi<ExtraApiRow[]>('/api/custos?tipo=extras', [])
+  const extrasCalc = extrasApi.map(e => ({ id: e.id, custoUnitario: Number(e.quantidade) > 0 ? Number(e.custo_total) / Number(e.quantidade) : 0 }))
   const [modalOpen, setModalOpen] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [form, setForm] = useState(formVazio)
   const [materiaisLinhas, setMateriaisLinhas] = useState<LinhaMaterial[]>([novaLinhaMaterial()])
+  const [extrasLinhas, setExtrasLinhas] = useState<LinhaExtra[]>([])
+  const [custoCalculado, setCustoCalculado] = useState(0)
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
   const [fichaAberta, setFichaAberta] = useState<ProdutoApiRow | null>(null)
   const [busca, setBusca] = useState('')
@@ -102,28 +111,42 @@ export function Catalogo() {
     return `PRD-${String(proximo).padStart(3, '0')}`
   }
 
-  function calcularPrecoSugerido(linhas: LinhaMaterial[], horasStr: string) {
+  function calcularPrecoSugerido(linhas: LinhaMaterial[], horasStr: string, extras: LinhaExtra[] = extrasLinhas) {
     const prefs = carregarPreferencias()
     const temMaterial = linhas.some(l => l.material_id && l.peso_g)
     if (!temMaterial) return null
     const r = calcularCusto({
       materiaisLinhas: linhas.map(l => ({ materialId: l.material_id, peso: l.peso_g })),
+      extrasLinhas: extras.filter(e => e.extra_id).map(e => ({ extraId: e.extra_id, quantidade: e.quantidade })),
       horasImpressao: horasStr,
       materiais: materiaisApi.map(m => ({ id: m.id, precoKg: Number(m.preco_kg) })),
+      extras: extrasCalc,
       margem: prefs.margemPadrao,
       tarifaKwh: prefs.tarifaKwh
     })
+    setCustoCalculado(r.custoTotal)
     return r.precoUnitario > 0 ? r.precoUnitario : null
   }
 
+  function atualizarExtra(id: string, campo: 'extra_id' | 'quantidade', valor: string) {
+    setExtrasLinhas(lista => {
+      const nova = lista.map(l => (l.id === id ? { ...l, [campo]: valor } : l))
+      const sugerido = calcularPrecoSugerido(materiaisLinhas, form.tempo_impressao_h, nova)
+      if (sugerido) setForm(f => ({ ...f, preco_padrao: sugerido.toFixed(2).replace('.', ',') }))
+      return nova
+    })
+  }
+
   function recalcularPreco(linhas: LinhaMaterial[], horas: string) {
-    const sugerido = calcularPrecoSugerido(linhas, horas)
+    const sugerido = calcularPrecoSugerido(linhas, horas, extrasLinhas)
     if (sugerido) setForm(f => ({ ...f, preco_padrao: sugerido.toFixed(2).replace('.', ',') }))
   }
 
   function abrirNovo() {
     setForm({ ...formVazio, codigo: gerarProximoCodigo() })
     setMateriaisLinhas([novaLinhaMaterial()])
+    setExtrasLinhas([])
+    setCustoCalculado(0)
     setModalOpen(true)
   }
   function abrirDuplicado(p: ProdutoApiRow) {
@@ -135,6 +158,8 @@ export function Catalogo() {
     })
     const linhas = materiaisDoProduto(p)
     setMateriaisLinhas(linhas.length > 0 ? linhas.map(l => ({ ...l, id: crypto.randomUUID() })) : [novaLinhaMaterial()])
+    setExtrasLinhas((p.extras_padrao ?? []).map(e => ({ id: crypto.randomUUID(), extra_id: e.extra_id, quantidade: String(e.quantidade) })))
+    setCustoCalculado(Number(p.custo_producao ?? 0))
     setModalOpen(true)
   }
   function abrirEdicao(p: ProdutoApiRow) {
@@ -146,6 +171,8 @@ export function Catalogo() {
     })
     const linhas = materiaisDoProduto(p)
     setMateriaisLinhas(linhas.length > 0 ? linhas : [novaLinhaMaterial()])
+    setExtrasLinhas((p.extras_padrao ?? []).map(e => ({ id: crypto.randomUUID(), extra_id: e.extra_id, quantidade: String(e.quantidade) })))
+    setCustoCalculado(Number(p.custo_producao ?? 0))
     setModalOpen(true)
   }
 
@@ -173,13 +200,16 @@ export function Catalogo() {
         tempo_impressao_h: form.tempo_impressao_h ? Number(form.tempo_impressao_h.replace(',', '.')) : null,
         preco_padrao: form.preco_padrao ? Number(form.preco_padrao.replace(',', '.')) : null,
         descricao: form.descricao || null, imagem_url: form.imagem_url || null, link_arquivo: form.link_arquivo || null,
-        categoria: form.categoria || null
+        categoria: form.categoria || null,
+        extras_padrao: extrasLinhas.filter(e => e.extra_id && e.quantidade).map(e => ({ extra_id: e.extra_id, quantidade: Number(e.quantidade) })),
+        custo_producao: custoCalculado > 0 ? custoCalculado : null
       }
       if (form.id) await api.patch(`/api/catalogo?id=${form.id}`, payload)
       else await api.post('/api/catalogo', payload)
       setModalOpen(false)
       setForm(formVazio)
       setMateriaisLinhas([novaLinhaMaterial()])
+      setExtrasLinhas([])
       reload()
     } catch (err) {
       console.error('[Salvar] erro:', err)
@@ -224,8 +254,8 @@ export function Catalogo() {
         <Select value={ordenacao} onChange={e => setOrdenacao(e.target.value as typeof ordenacao)} className="!mb-0 !w-auto min-w-[160px]">
           <option value="recente">Mais recente</option>
           <option value="vendido">Mais vendido</option>
-          <option value="preco_asc">Preço: menor primeiro</option>
-          <option value="preco_desc">Preço: maior primeiro</option>
+          <option value="preco_asc">Preço venda: menor primeiro</option>
+          <option value="preco_desc">Preço venda: maior primeiro</option>
           <option value="nome">Nome (A-Z)</option>
         </Select>
       </div>
@@ -243,7 +273,8 @@ export function Catalogo() {
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Código</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Nome</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Materiais</th>
-                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Preço padrão</th>
+                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Custo produção</th>
+                <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Preço venda</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Vendidos</th>
                 <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]"></th>
               </tr>
@@ -275,7 +306,8 @@ export function Catalogo() {
                       </button>
                     </td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{nomesMateriais(p)}</td>
-                    <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.preco_padrao ? formatMoney(Number(p.preco_padrao)) : '—'}</td>
+                    <td className={`px-3 py-2.5 text-[var(--muted-foreground)] ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.custo_producao ? formatMoney(Number(p.custo_producao)) : '—'}</td>
+                    <td className={`px-3 py-2.5 font-semibold ${!last ? 'border-b border-[var(--border)]' : ''}`}>{p.preco_padrao ? formatMoney(Number(p.preco_padrao)) : '—'}</td>
                     <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
                       {contagemUso(p.id) > 0 ? (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><TrendingUp size={12} />{contagemUso(p.id)}x</span>
@@ -349,8 +381,12 @@ export function Catalogo() {
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="bg-[var(--muted)] rounded-lg p-3">
-                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Preço padrão</div>
-                <div className="font-bold mt-0.5">{fichaAberta.preco_padrao ? formatMoney(Number(fichaAberta.preco_padrao)) : '—'}</div>
+                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Custo de produção</div>
+                <div className="font-bold mt-0.5">{fichaAberta.custo_producao ? formatMoney(Number(fichaAberta.custo_producao)) : '—'}</div>
+              </div>
+              <div className="bg-[var(--accent)] rounded-lg p-3">
+                <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Preço de venda</div>
+                <div className="font-bold mt-0.5 text-[var(--secondary)]">{fichaAberta.preco_padrao ? formatMoney(Number(fichaAberta.preco_padrao)) : '—'}</div>
               </div>
               <div className="bg-[var(--muted)] rounded-lg p-3">
                 <div className="text-[11px] font-semibold text-[var(--muted-foreground)]">Tempo de impressão</div>
@@ -429,6 +465,42 @@ export function Catalogo() {
           <Plus size={13} />Adicionar outro material/cor
         </button>
 
+        {extrasApi.length > 0 && (
+          <>
+            <Label>Materiais extras (parafuso, ímã, embalagem...)</Label>
+            {extrasLinhas.length > 0 && (
+              <div className="flex flex-col gap-2 mb-2">
+                {extrasLinhas.map(l => {
+                  const ex = extrasApi.find(e => e.id === l.extra_id)
+                  return (
+                    <div key={l.id} className="grid grid-cols-[1fr_90px_28px] gap-2 items-start">
+                      <Select value={l.extra_id} onChange={e => atualizarExtra(l.id, 'extra_id', e.target.value)} className="!mb-0">
+                        <option value="">Selecione...</option>
+                        {extrasApi.map(e => <option key={e.id} value={e.id}>{e.nome} ({e.unidade})</option>)}
+                      </Select>
+                      <Input placeholder={ex?.unidade ?? 'qtd'} value={l.quantidade} onChange={e => atualizarExtra(l.id, 'quantidade', e.target.value)} className="!mb-0" />
+                      <button
+                        type="button"
+                        onClick={() => setExtrasLinhas(lista => lista.filter(x => x.id !== l.id))}
+                        className="w-7 h-9 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:text-red-600"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setExtrasLinhas(l => [...l, novaLinhaExtra()])}
+              className="text-xs font-semibold text-[var(--primary)] flex items-center gap-1 mb-3"
+            >
+              <Plus size={13} />Adicionar material extra
+            </button>
+          </>
+        )}
+
         <div className="grid grid-cols-2 gap-x-4">
           <div>
             <Label>Tempo impressão (h)</Label>
@@ -442,10 +514,20 @@ export function Catalogo() {
             />
           </div>
           <div>
-            <Label>Preço padrão (R$)</Label>
+            <Label>Preço de venda (R$)</Label>
             <Input placeholder="0,00" value={form.preco_padrao} onChange={e => setForm(f => ({ ...f, preco_padrao: e.target.value }))} />
           </div>
         </div>
+        {custoCalculado > 0 && (
+          <div className="flex justify-between items-center bg-[var(--muted)] rounded-lg px-3 py-2 mb-3 text-[13px]">
+            <span className="text-[var(--muted-foreground)]">Custo de produção</span>
+            <span className="font-semibold">{formatMoney(custoCalculado)}</span>
+            <span className="text-[var(--muted-foreground)]">Lucro</span>
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+              {formatMoney((Number(form.preco_padrao.replace(',', '.')) || 0) - custoCalculado)}
+            </span>
+          </div>
+        )}
         {materiaisLinhas.some(l => l.material_id) ? (
           <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">Calculado com sua margem e custo de energia padrão (Configurações) — pode ajustar na mão.</div>
         ) : (
