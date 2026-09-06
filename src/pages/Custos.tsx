@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, AlertTriangle, Package, Receipt } from 'lucide-react'
+import { Plus, Pencil, Trash2, AlertTriangle, Package, Receipt, Check, ArrowDownToLine } from 'lucide-react'
 import { EstadoVazio } from '@/components/ui/EstadoVazio'
 import { CabecalhoPagina } from '@/components/ui/CabecalhoPagina'
 import { Card } from '@/components/ui/Card'
@@ -20,6 +20,7 @@ interface ExtraApiRow {
 interface CustoOpApiRow {
   id: string; descricao: string; categoria: string; valor: string; frequencia: string; observacoes: string | null
 }
+interface LancamentoApiRow { id: string; data: string; custo_operacional_id: string | null }
 
 const categoriasCusto = ['aluguel', 'salario', 'imposto', 'internet', 'software', 'marketing', 'outros']
 const frequencias = [
@@ -35,6 +36,8 @@ const formOpVazio = { id: '', descricao: '', categoria: 'outros', valor: '', fre
 export function Custos() {
   const { data: extrasApi, loading: extrasLoading, error: extrasError, reload: reloadExtras } = useApi<ExtraApiRow[]>('/api/custos?tipo=extras', [])
   const { data: opsApi, loading: opsLoading, error: opsError, reload: reloadOps } = useApi<CustoOpApiRow[]>('/api/custos?tipo=operacionais', [])
+  const { data: lancamentosApi, reload: reloadLancamentos } = useApi<LancamentoApiRow[]>('/api/lancamentos', [])
+  const [lancando, setLancando] = useState<string | null>(null)
 
   const [aba, setAba] = useState<'extras' | 'operacionais'>('extras')
   const [modalExtra, setModalExtra] = useState(false)
@@ -61,6 +64,60 @@ export function Custos() {
     if (o.frequencia === 'anual') return s + v / 12
     return s
   }, 0)
+
+  const mesAtual = new Date().toISOString().slice(0, 7)
+
+  /** Esse custo fixo já foi lançado no Financeiro neste mês? */
+  function jaLancadoNoMes(custoId: string) {
+    return lancamentosApi.some(l => l.custo_operacional_id === custoId && l.data.slice(0, 7) === mesAtual)
+  }
+
+  /** Lança um custo fixo como despesa do mês no Financeiro. */
+  async function lancarNoFinanceiro(o: CustoOpApiRow) {
+    setLancando(o.id)
+    try {
+      await api.post('/api/lancamentos', {
+        data: new Date().toISOString().slice(0, 10),
+        descricao: o.descricao,
+        tipo: 'despesa',
+        valor: Number(o.valor),
+        categoria: ['aluguel', 'salario', 'imposto'].includes(o.categoria) ? 'outros' : o.categoria === 'energia' ? 'energia' : 'outros',
+        custo_operacional_id: o.id
+      })
+      reloadLancamentos()
+    } catch (err) {
+      console.error('[Lançar custo] erro:', err)
+      alert('Não deu pra lançar no Financeiro. Confere o console (F12).')
+    } finally {
+      setLancando(null)
+    }
+  }
+
+  /** Lança de uma vez todos os custos mensais que ainda não foram lançados. */
+  async function lancarTodosDoMes() {
+    const pendentes = opsApi.filter(o => o.frequencia === 'mensal' && !jaLancadoNoMes(o.id))
+    if (pendentes.length === 0) return
+    setLancando('todos')
+    try {
+      for (const o of pendentes) {
+        await api.post('/api/lancamentos', {
+          data: new Date().toISOString().slice(0, 10),
+          descricao: o.descricao,
+          tipo: 'despesa',
+          valor: Number(o.valor),
+          categoria: o.categoria === 'energia' ? 'energia' : 'outros',
+          custo_operacional_id: o.id
+        })
+      }
+      reloadLancamentos()
+      alert(`${pendentes.length} custo(s) lançado(s) no Financeiro.`)
+    } catch (err) {
+      console.error('[Lançar todos] erro:', err)
+      alert('Não deu pra lançar tudo. Confere o console (F12).')
+    } finally {
+      setLancando(null)
+    }
+  }
 
   function abrirNovoExtra() { setFormExtra(formExtraVazio); setModalExtra(true) }
   function abrirEdicaoExtra(e: ExtraApiRow) {
@@ -241,7 +298,7 @@ export function Custos() {
       {aba === 'operacionais' && (
         <>
           <p className="text-[var(--muted-foreground)] text-sm mb-4">
-            Aluguel, salário, imposto, internet — o que você paga todo mês independente de produzir. Serve pra saber se o lucro cobre a operação.
+            Aluguel, salário, imposto, internet — o que você paga todo mês independente de produzir. Aqui é só o cadastro; use o botão Lançar pra jogar a despesa no Financeiro do mês.
           </p>
           <div className="flex gap-4 flex-wrap mb-4">
             <Card className="flex-1 min-w-[220px]">
@@ -252,6 +309,22 @@ export function Custos() {
             <Card className="flex-1 min-w-[220px]">
               <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><Package size={14} />Custos cadastrados</div>
               <div className="text-2xl font-extrabold">{opsApi.length}</div>
+            </Card>
+            <Card className="flex-1 min-w-[220px]">
+              <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><ArrowDownToLine size={14} />Lancados este mes</div>
+              <div className="text-2xl font-extrabold">
+                {opsApi.filter(o => jaLancadoNoMes(o.id)).length}
+                <span className="text-base font-normal text-[var(--muted-foreground)]"> de {opsApi.filter(o => o.frequencia === 'mensal').length}</span>
+              </div>
+              {opsApi.some(o => o.frequencia === 'mensal' && !jaLancadoNoMes(o.id)) && (
+                <button
+                  onClick={lancarTodosDoMes}
+                  disabled={lancando === 'todos'}
+                  className="text-xs font-semibold text-[var(--primary)] mt-1.5"
+                >
+                  {lancando === 'todos' ? 'Lancando...' : 'Lancar os que faltam'}
+                </button>
+              )}
             </Card>
           </div>
           <Card className="p-0">
@@ -265,6 +338,7 @@ export function Custos() {
                     <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Categoria</th>
                     <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Valor</th>
                     <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Frequência</th>
+                    <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]">Financeiro</th>
                     <th className="text-left text-[var(--muted-foreground)] font-semibold text-xs px-3 py-2.5 border-b border-[var(--border)]"></th>
                   </tr>
                 </thead>
@@ -281,6 +355,21 @@ export function Custos() {
                         <td className={`px-3 py-2.5 font-semibold ${!last ? 'border-b border-[var(--border)]' : ''}`}>{formatMoney(Number(o.valor))}</td>
                         <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
                           {frequencias.find(f => f.valor === o.frequencia)?.label ?? o.frequencia}
+                        </td>
+                        <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
+                          {jaLancadoNoMes(o.id) ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                              <Check size={13} />Lancado
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => lancarNoFinanceiro(o)}
+                              disabled={lancando === o.id}
+                              className="text-xs font-semibold text-[var(--primary)] flex items-center gap-1 hover:underline"
+                            >
+                              <ArrowDownToLine size={12} />{lancando === o.id ? 'Lancando...' : 'Lancar'}
+                            </button>
+                          )}
                         </td>
                         <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
                           {confirmandoId === o.id ? (
