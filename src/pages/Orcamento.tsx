@@ -14,14 +14,14 @@ import { materiais as materiaisMock } from '@/data/mockData'
 import { carregarPreferencias } from '@/lib/settings'
 import { calcularCusto, custoUnitarioExtra } from '@/lib/custo'
 
-interface MaterialApiRow { id: string; nome: string; preco_kg: string }
+interface MaterialApiRow { id: string; nome: string; preco_kg: string; codigo?: string | null }
 interface CatalogoApiRow {
   id: string; codigo: string; nome: string; material_id: string | null
   peso_padrao_g: string | null; tempo_impressao_h: string | null; ativo: boolean
   materiais_padrao: { material_id: string; peso_g: number }[] | null
 }
 interface ClienteApiRow { id: string; nome: string }
-interface ExtraApiRow { id: string; nome: string; unidade: string; quantidade: string; custo_total: string }
+interface ExtraApiRow { id: string; nome: string; unidade: string; quantidade: string; custo_total: string; codigo?: string | null }
 interface EquipApiRow { id: string; nome: string; tipo: string; potencia_w: string | null }
 
 interface MaterialSalvo { materialId: string; peso: string }
@@ -68,8 +68,8 @@ export function Orcamento() {
   const usandoMock = !loading && !!error
   const vazio = !loading && !error && data.length === 0
   const materiais = usandoMock
-    ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, precoKg: m.precoKg }))
-    : data.map(m => ({ id: m.id, nome: m.nome, precoKg: Number(m.preco_kg) }))
+    ? materiaisMock.map(m => ({ id: m.id, codigo: '', nome: m.nome, precoKg: m.precoKg }))
+    : data.map(m => ({ id: m.id, codigo: m.codigo ?? '', nome: m.nome, precoKg: Number(m.preco_kg) }))
 
   const { data: clientesApi } = useApi<ClienteApiRow[]>('/api/clientes', [])
   const { data: salvosApi, reload: reloadSalvos } = useApi<OrcamentoSalvoApiRow[]>('/api/orcamentos', [])
@@ -171,7 +171,18 @@ export function Orcamento() {
   }
 
   function nomesMateriais(it: ItemOrcamento) {
-    return it.materiais.map(l => materiais.find(m => m.id === l.materialId)?.nome).filter(Boolean).join(' + ')
+    const mats = it.materiais.map(l => rotuloMaterial(l.materialId))
+    const exts = it.extras.map(l => rotuloExtra(l.extraId))
+    return [...mats, ...exts].filter(Boolean).join(' + ')
+  }
+  /** "FIL-002 PLA BRANCO" — o código garante que a peça usa o mesmo material do orçamento. */
+  function rotuloMaterial(id: string) {
+    const m = materiais.find(mm => mm.id === id)
+    return m ? `${m.codigo ? m.codigo + ' ' : ''}${m.nome}` : ''
+  }
+  function rotuloExtra(id: string) {
+    const e = extrasApi.find(ee => ee.id === id)
+    return e ? `${e.codigo ? e.codigo + ' ' : ''}${e.nome}` : ''
   }
 
   function enviarWhatsApp() {
@@ -542,7 +553,7 @@ export function Orcamento() {
                     <div key={l.id} className="grid grid-cols-[1fr_90px_28px] gap-2 items-start">
                       <Select value={l.materialId} onChange={e => atualizarMaterialLinha(it.id, l.id, 'materialId', e.target.value)} className="!mb-0">
                         <option value="">Selecione...</option>
-                        {materiais.map(m => <option key={m.id} value={m.id}>{m.nome} — {formatMoney(m.precoKg)}/kg</option>)}
+                        {materiais.map(m => <option key={m.id} value={m.id}>{m.codigo ? `${m.codigo} — ` : ''}{m.nome} — {formatMoney(m.precoKg)}/kg</option>)}
                       </Select>
                       <Input placeholder="Peso (g)" value={l.peso} onChange={e => atualizarMaterialLinha(it.id, l.id, 'peso', e.target.value)} className="!mb-0" />
                       <button
@@ -575,7 +586,7 @@ export function Orcamento() {
                             <div key={l.id} className="grid grid-cols-[1fr_90px_28px] gap-2 items-start">
                               <Select value={l.extraId} onChange={e => atualizarExtraLinha(it.id, l.id, 'extraId', e.target.value)} className="!mb-0">
                                 <option value="">Selecione...</option>
-                                {extrasApi.map(e => <option key={e.id} value={e.id}>{e.nome} ({e.unidade})</option>)}
+                                {extrasApi.map(e => <option key={e.id} value={e.id}>{e.codigo ? `${e.codigo} — ` : ''}{e.nome} ({e.unidade})</option>)}
                               </Select>
                               <Input placeholder={ex?.unidade ?? 'qtd'} value={l.quantidade} onChange={e => atualizarExtraLinha(it.id, l.id, 'quantidade', e.target.value)} className="!mb-0" />
                               <button
@@ -739,7 +750,13 @@ export function Orcamento() {
                           )}
                         </div>
                         <div className="text-xs text-[var(--muted-foreground)]">
-                          {o.itens.map(it => `${it.nome} (un.: ${formatMoney(it.custoUnitario ?? 0)})`).join(', ')} · {formatarDataBR(o.criado_em)}
+                          {o.itens.map(it => {
+                            const usados = [
+                              ...(it.materiais ?? []).map(m => rotuloMaterial(m.materialId)),
+                              ...(it.extras ?? []).map(x => rotuloExtra(x.extraId))
+                            ].filter(Boolean).join(' + ')
+                            return `${it.nome} (un.: ${formatMoney(it.custoUnitario ?? 0)}${usados ? ` · ${usados}` : ''})`
+                          }).join(', ')} · {formatarDataBR(o.criado_em)}
                         </div>
                       </>
                     )}
