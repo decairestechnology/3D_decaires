@@ -59,7 +59,7 @@ interface PedidoApiRow {
   status_pagamento: string; forma_pagamento: string | null; valor_pago: string; data_pagamento: string | null
 }
 interface ClienteApiRow { id: string; nome: string }
-interface MaterialApiRow { id: string; nome: string }
+interface MaterialApiRow { id: string; nome: string; codigo?: string | null }
 interface CatalogoApiRow {
   id: string; codigo: string; nome: string; material_id: string | null
   peso_padrao_g: string | null; preco_padrao: string | null; ativo: boolean
@@ -569,7 +569,7 @@ export function Pedidos() {
                       <div key={l.id} className="grid grid-cols-[1fr_80px_26px] gap-2">
                         <Select value={l.material_id} onChange={e => atualizarMaterial(item.id, l.id, 'material_id', e.target.value)} className="!mb-0">
                           <option value="">Selecione...</option>
-                          {materiaisApi.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+                          {materiaisApi.map(m => <option key={m.id} value={m.id}>{m.codigo ? `${m.codigo} — ` : ''}{m.nome}</option>)}
                         </Select>
                         <Input placeholder="g" value={l.peso_g} onChange={e => atualizarMaterial(item.id, l.id, 'peso_g', e.target.value)} className="!mb-0" />
                         <button
