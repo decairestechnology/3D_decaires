@@ -21,8 +21,8 @@ interface ProdutoApiRow {
   extras_padrao: ExtraPadrao[] | null; custo_producao: string | null
 }
 interface ExtraPadrao { extra_id: string; quantidade: number }
-interface ExtraApiRow { id: string; nome: string; unidade: string; quantidade: string; custo_total: string }
-interface MaterialApiRow { id: string; nome: string; preco_kg: string }
+interface ExtraApiRow { id: string; nome: string; unidade: string; quantidade: string; custo_total: string; codigo?: string | null }
+interface MaterialApiRow { id: string; nome: string; preco_kg: string; codigo?: string | null }
 interface ItemPedido { catalogo_produto_id?: string | null; quantidade: number }
 interface PedidoApiRow {
   catalogo_produto_id: string | null
@@ -443,7 +443,7 @@ export function Catalogo() {
             <div key={l.id} className="grid grid-cols-[1fr_90px_28px] gap-2 items-start">
               <Select value={l.material_id} onChange={e => atualizarLinha(l.id, 'material_id', e.target.value)} className="!mb-0">
                 <option value="">Selecione o material...</option>
-                {materiaisApi.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+                {materiaisApi.map(m => <option key={m.id} value={m.id}>{m.codigo ? `${m.codigo} — ` : ''}{m.nome}</option>)}
               </Select>
               <Input placeholder="Peso (g)" value={l.peso_g} onChange={e => atualizarLinha(l.id, 'peso_g', e.target.value)} className="!mb-0" />
               <button
@@ -476,7 +476,7 @@ export function Catalogo() {
                     <div key={l.id} className="grid grid-cols-[1fr_90px_28px] gap-2 items-start">
                       <Select value={l.extra_id} onChange={e => atualizarExtra(l.id, 'extra_id', e.target.value)} className="!mb-0">
                         <option value="">Selecione...</option>
-                        {extrasApi.map(e => <option key={e.id} value={e.id}>{e.nome} ({e.unidade})</option>)}
+                        {extrasApi.map(e => <option key={e.id} value={e.id}>{e.codigo ? `${e.codigo} — ` : ''}{e.nome} ({e.unidade})</option>)}
                       </Select>
                       <Input placeholder={ex?.unidade ?? 'qtd'} value={l.quantidade} onChange={e => atualizarExtra(l.id, 'quantidade', e.target.value)} className="!mb-0" />
                       <button
