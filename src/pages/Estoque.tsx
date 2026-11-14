@@ -83,11 +83,11 @@ export function Estoque() {
 
   function gerarProximoCodigoMaterial() {
     const numeros = materiais
-      .map(m => m.codigo.match(/^MAT-(\d+)$/))
+      .map(m => m.codigo.match(/^FIL-(\d+)$/))
       .filter((m): m is RegExpMatchArray => !!m)
       .map(m => Number(m[1]))
     const proximo = numeros.length > 0 ? Math.max(...numeros) + 1 : 1
-    return `MAT-${String(proximo).padStart(3, '0')}`
+    return `FIL-${String(proximo).padStart(3, '0')}`
   }
 
   /** Mostra o motivo real que a API devolveu, em vez de mensagem genérica. */
@@ -479,7 +479,7 @@ export function Estoque() {
           <>
             <Label>Código de referência</Label>
             <div className="flex gap-2">
-              <Input placeholder="Ex: MAT-001" value={formMaterial.codigo} onChange={e => setFormMaterial(f => ({ ...f, codigo: e.target.value.toUpperCase() }))} />
+              <Input placeholder="Ex: FIL-001" value={formMaterial.codigo} onChange={e => setFormMaterial(f => ({ ...f, codigo: e.target.value.toUpperCase() }))} />
               <button
                 type="button"
                 onClick={() => setFormMaterial(f => ({ ...f, codigo: gerarProximoCodigoMaterial() }))}
