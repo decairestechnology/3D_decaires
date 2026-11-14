@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, AlertTriangle, Package, Receipt, Check, ArrowDownToLine } from 'lucide-react'
+import { Plus, Pencil, Trash2, AlertTriangle, Package, Receipt, Check, ArrowDownToLine, RefreshCw, Tag } from 'lucide-react'
 import { EstadoVazio } from '@/components/ui/EstadoVazio'
 import { CabecalhoPagina } from '@/components/ui/CabecalhoPagina'
 import { Card } from '@/components/ui/Card'
@@ -15,8 +15,9 @@ import { custoUnitarioExtra } from '@/lib/custo'
 
 interface ExtraApiRow {
   id: string; nome: string; unidade: string; quantidade: string; quantidade_usada: string
-  custo_total: string; alerta_estoque_baixo: string; observacoes: string | null
+  custo_total: string; alerta_estoque_baixo: string; observacoes: string | null; codigo?: string | null
 }
+interface TipoCodigoRow { id: string; prefixo: string; descricao: string }
 interface CustoOpApiRow {
   id: string; descricao: string; categoria: string; valor: string; frequencia: string; observacoes: string | null
 }
@@ -30,11 +31,12 @@ const frequencias = [
 ]
 const unidades = ['un', 'ml', 'l', 'g', 'kg', 'm', 'cm', 'par', 'pct']
 
-const formExtraVazio = { id: '', nome: '', unidade: 'un', quantidade: '', quantidade_usada: '0', custo_total: '', alerta_estoque_baixo: '0', observacoes: '', lancar_despesa: false }
+const formExtraVazio = { id: '', codigo: '', nome: '', unidade: 'un', quantidade: '', quantidade_usada: '0', custo_total: '', alerta_estoque_baixo: '0', observacoes: '', lancar_despesa: false }
 const formOpVazio = { id: '', descricao: '', categoria: 'outros', valor: '', frequencia: 'mensal', observacoes: '' }
 
 export function Custos() {
   const { data: extrasApi, loading: extrasLoading, error: extrasError, reload: reloadExtras } = useApi<ExtraApiRow[]>('/api/custos?tipo=extras', [])
+  const { data: tiposCodigo } = useApi<TipoCodigoRow[]>('/api/custos?tipo=codigos', [])
   const { data: opsApi, loading: opsLoading, error: opsError, reload: reloadOps } = useApi<CustoOpApiRow[]>('/api/custos?tipo=operacionais', [])
   const { data: lancamentosApi, reload: reloadLancamentos } = useApi<LancamentoApiRow[]>('/api/lancamentos', [])
   const [lancando, setLancando] = useState<string | null>(null)
@@ -119,10 +121,21 @@ export function Custos() {
     }
   }
 
-  function abrirNovoExtra() { setFormExtra(formExtraVazio); setModalExtra(true) }
+  /** Próximo número livre dentro do prefixo: CHV-001, CHV-002... */
+  function gerarProximoCodigoExtra(prefixo = 'EXT') {
+    const numeros = extrasApi
+      .map(e => (e.codigo ?? '').match(/^([A-Z0-9]+)-(\d+)$/))
+      .filter((m): m is RegExpMatchArray => !!m && m[1] === prefixo)
+      .map(m => Number(m[2]))
+    const proximo = numeros.length > 0 ? Math.max(...numeros) + 1 : 1
+    return `${prefixo}-${String(proximo).padStart(3, '0')}`
+  }
+  const prefixoDoForm = (formExtra.codigo.match(/^([A-Z0-9]+)-/)?.[1]) ?? ''
+  const prefixosDisponiveis = tiposCodigo.length > 0 ? tiposCodigo : [{ id: 'ext', prefixo: 'EXT', descricao: 'Material extra (geral)' }]
+  function abrirNovoExtra() { setFormExtra({ ...formExtraVazio, codigo: gerarProximoCodigoExtra() }); setModalExtra(true) }
   function abrirEdicaoExtra(e: ExtraApiRow) {
     setFormExtra({
-      id: e.id, nome: e.nome, unidade: e.unidade, quantidade: e.quantidade,
+      id: e.id, codigo: e.codigo ?? '', nome: e.nome, unidade: e.unidade, quantidade: e.quantidade,
       quantidade_usada: e.quantidade_usada, custo_total: String(e.custo_total).replace('.', ','),
       alerta_estoque_baixo: e.alerta_estoque_baixo, observacoes: e.observacoes ?? '', lancar_despesa: false
     })
@@ -143,7 +156,7 @@ export function Custos() {
     setSalvando(true)
     try {
       const payload = {
-        nome: formExtra.nome, unidade: formExtra.unidade,
+        nome: formExtra.nome, codigo: formExtra.codigo.trim().toUpperCase() || null, unidade: formExtra.unidade,
         quantidade: Number(formExtra.quantidade.replace(',', '.')) || 0,
         quantidade_usada: Number(formExtra.quantidade_usada.replace(',', '.')) || 0,
         custo_total: Number(formExtra.custo_total.replace(',', '.')) || 0,
@@ -264,6 +277,7 @@ export function Custos() {
                     return (
                       <tr key={e.id}>
                         <td className={`px-3 py-2.5 ${!last ? 'border-b border-[var(--border)]' : ''}`}>
+                          {e.codigo && <span className="inline-flex items-center gap-1 font-mono text-[10px] font-bold bg-[var(--muted)] px-1.5 py-0.5 rounded mr-2"><Tag size={9} />{e.codigo}</span>}
                           {e.nome}
                           {e.observacoes && <div className="text-xs text-[var(--muted-foreground)]">{e.observacoes}</div>}
                         </td>
@@ -402,6 +416,29 @@ export function Custos() {
           </>
         }
       >
+        <Label>Tipo de material</Label>
+        <Select
+          value={prefixosDisponiveis.some(t => t.prefixo === prefixoDoForm) ? prefixoDoForm : ''}
+          onChange={e => { const px = e.target.value; if (px) setFormExtra(f => ({ ...f, codigo: gerarProximoCodigoExtra(px) })) }}
+        >
+          <option value="">Outro (digitar o código)</option>
+          {prefixosDisponiveis.map(t => <option key={t.id} value={t.prefixo}>{t.prefixo} — {t.descricao}</option>)}
+        </Select>
+        <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
+          Escolhe o tipo e o código sai sozinho. Pra criar tipos novos (CHV, EMB, LED...), vai em Configurações → Códigos de material.
+        </div>
+        <Label>Código de referência</Label>
+        <div className="flex gap-2">
+          <Input placeholder="Ex: EXT-001" value={formExtra.codigo} onChange={e => setFormExtra(f => ({ ...f, codigo: e.target.value.toUpperCase() }))} />
+          <button
+            type="button"
+            onClick={() => setFormExtra(f => ({ ...f, codigo: gerarProximoCodigoExtra(prefixoDoForm || 'EXT') }))}
+            title="Gerar código automático"
+            className="w-9 h-9 rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)] flex items-center justify-center flex-shrink-0 mb-3"
+          >
+            <RefreshCw size={14} />
+          </button>
+        </div>
         <div className="grid grid-cols-2 gap-x-4">
           <div><Label>Nome</Label><Input placeholder="Ex: Parafuso M3" value={formExtra.nome} onChange={e => setFormExtra(f => ({ ...f, nome: e.target.value }))} /></div>
           <div>
