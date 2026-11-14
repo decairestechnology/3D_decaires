@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Plus, AlertTriangle, Trash2, Boxes, Banknote, TrendingUp, Pencil } from 'lucide-react'
+import { Plus, AlertTriangle, Trash2, Boxes, Banknote, TrendingUp, Pencil, RefreshCw, Tag, Search } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -12,7 +12,7 @@ import { api } from '@/lib/api'
 import { formatarDataBR } from '@/lib/date'
 import { materiais as materiaisMock, produtosProntos as produtosMock } from '@/data/mockData'
 
-interface MaterialApiRow { id: string; nome: string; preco_kg: string; estoque_g: string; capacidade_g: string; alerta_estoque_g: string | null; marca: string | null }
+interface MaterialApiRow { id: string; nome: string; preco_kg: string; estoque_g: string; capacidade_g: string; alerta_estoque_g: string | null; marca: string | null; codigo?: string | null }
 interface ProdutoApiRow { id: string; nome: string; material: string | null; quantidade: number; custo_unitario: string; preco_venda: string; catalogo_produto_id: string | null }
 interface CatalogoApiRow {
   id: string; codigo: string; nome: string; preco_padrao: string | null
@@ -33,7 +33,7 @@ function statusMaterial(pct: number, estoqueG?: number, alertaG?: number | null)
   return { color: 'green', label: 'OK', bar: '#10B981' }
 }
 
-const formMaterialVazio = { id: '', nome: '', marca: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000', alerta_estoque_g: '', lancar_despesa: false, valor_compra: '' }
+const formMaterialVazio = { id: '', codigo: '', nome: '', marca: '', preco_kg: '', estoque_g: '1000', capacidade_g: '1000', alerta_estoque_g: '', lancar_despesa: false, valor_compra: '' }
 const formProdutoVazio = { id: '', nome: '', material: '', quantidade: '1', custo_unitario: '', preco_venda: '', catalogo_produto_id: '' }
 const formPerdaVazio = { id: '', material_id: '', peso_perdido_g: '', motivo: '', custo: '', data: '' }
 
@@ -46,6 +46,7 @@ export function Estoque() {
   const [formMaterial, setFormMaterial] = useState(formMaterialVazio)
   const [formProduto, setFormProduto] = useState(formProdutoVazio)
   const [formPerda, setFormPerda] = useState(formPerdaVazio)
+  const [buscaMat, setBuscaMat] = useState('')
 
   const { data: matApi, loading: matLoading, error: matError, reload: reloadMat } = useApi<MaterialApiRow[]>('/api/materiais', [])
   const { data: prodApi, loading: prodLoading, error: prodError, reload: reloadProd } = useApi<ProdutoApiRow[]>('/api/produtos-prontos', [])
@@ -56,8 +57,8 @@ export function Estoque() {
   const matMock = !matLoading && !!matError
   const matVazio = !matLoading && !matError && matApi.length === 0
   const materiais = matMock
-    ? materiaisMock.map(m => ({ id: m.id, nome: m.nome, marca: '', estoqueG: m.estoqueG, capacidadeG: m.capacidadeG, precoKg: m.precoKg, alertaEstoqueG: null }))
-    : matApi.map(m => ({ id: m.id, nome: m.nome, marca: m.marca ?? '', estoqueG: Number(m.estoque_g), capacidadeG: Number(m.capacidade_g), precoKg: Number(m.preco_kg), alertaEstoqueG: m.alerta_estoque_g ? Number(m.alerta_estoque_g) : null }))
+    ? materiaisMock.map(m => ({ id: m.id, codigo: '', nome: m.nome, marca: '', estoqueG: m.estoqueG, capacidadeG: m.capacidadeG, precoKg: m.precoKg, alertaEstoqueG: null }))
+    : matApi.map(m => ({ id: m.id, codigo: m.codigo ?? '', nome: m.nome, marca: m.marca ?? '', estoqueG: Number(m.estoque_g), capacidadeG: Number(m.capacidade_g), precoKg: Number(m.preco_kg), alertaEstoqueG: m.alerta_estoque_g ? Number(m.alerta_estoque_g) : null }))
 
   const prodMock = !prodLoading && !!prodError
   const prodVazio = !prodLoading && !prodError && prodApi.length === 0
@@ -76,13 +77,33 @@ export function Estoque() {
 
   const baixos = materiais.filter(m => statusMaterial((m.estoqueG / m.capacidadeG) * 100, m.estoqueG, m.alertaEstoqueG).color === 'red')
 
+  const termoMat = buscaMat.trim().toLowerCase()
+  const materiaisFiltrados = !termoMat ? materiais : materiais.filter(m =>
+    m.nome.toLowerCase().includes(termoMat) || m.codigo.toLowerCase().includes(termoMat) || m.marca.toLowerCase().includes(termoMat))
+
+  function gerarProximoCodigoMaterial() {
+    const numeros = materiais
+      .map(m => m.codigo.match(/^MAT-(\d+)$/))
+      .filter((m): m is RegExpMatchArray => !!m)
+      .map(m => Number(m[1]))
+    const proximo = numeros.length > 0 ? Math.max(...numeros) + 1 : 1
+    return `MAT-${String(proximo).padStart(3, '0')}`
+  }
+
+  /** Mostra o motivo real que a API devolveu, em vez de mensagem genérica. */
+  function motivoErro(err: unknown): string {
+    const bruto = err instanceof Error ? err.message : String(err)
+    const m = bruto.match(/"error"\s*:\s*"([^"]+)"/)
+    return (m ? m[1] : bruto).slice(0, 300)
+  }
+
   function abrirNovo() {
-    if (aba === 'materia') setFormMaterial(formMaterialVazio)
+    if (aba === 'materia') setFormMaterial({ ...formMaterialVazio, codigo: gerarProximoCodigoMaterial() })
     else setFormProduto(formProdutoVazio)
     setModalOpen(true)
   }
   function abrirEdicaoMaterial(m: typeof materiais[number]) {
-    setFormMaterial({ id: m.id, nome: m.nome, marca: m.marca ?? '', preco_kg: String(m.precoKg).replace('.', ','), estoque_g: String(m.estoqueG), capacidade_g: String(m.capacidadeG), alerta_estoque_g: m.alertaEstoqueG ? String(m.alertaEstoqueG) : '', lancar_despesa: false, valor_compra: '' })
+    setFormMaterial({ id: m.id, codigo: m.codigo, nome: m.nome, marca: m.marca ?? '', preco_kg: String(m.precoKg).replace('.', ','), estoque_g: String(m.estoqueG), capacidade_g: String(m.capacidadeG), alerta_estoque_g: m.alertaEstoqueG ? String(m.alertaEstoqueG) : '', lancar_despesa: false, valor_compra: '' })
     setModalOpen(true)
   }
   function abrirEdicaoProduto(p: typeof produtos[number]) {
@@ -128,6 +149,7 @@ export function Estoque() {
     try {
       const payload = {
         nome: formMaterial.nome,
+        codigo: formMaterial.codigo.trim().toUpperCase() || null,
         marca: formMaterial.marca || null,
         preco_kg: Number(formMaterial.preco_kg.replace(',', '.')) || 0,
         estoque_g: Number(formMaterial.estoque_g) || 0,
@@ -156,7 +178,7 @@ export function Estoque() {
       reloadMat()
     } catch (err) {
       console.error('[Salvar] erro:', err)
-      alert('Não deu pra salvar — confere se o banco (Neon) está conectado e as variáveis de ambiente configuradas.')
+      alert('Não deu pra salvar.\n\nMotivo: ' + motivoErro(err))
     } finally {
       setSalvando(false)
     }
@@ -188,7 +210,7 @@ export function Estoque() {
       reloadProd()
     } catch (err) {
       console.error('[Salvar] erro:', err)
-      alert('Não deu pra salvar — confere se o banco (Neon) está conectado e as variáveis de ambiente configuradas.')
+      alert('Não deu pra salvar.\n\nMotivo: ' + motivoErro(err))
     } finally {
       setSalvando(false)
     }
@@ -213,7 +235,7 @@ export function Estoque() {
       reloadPerdas()
     } catch (err) {
       console.error('[Salvar] erro:', err)
-      alert('Não deu pra salvar — confere se o banco (Neon) está conectado e as variáveis de ambiente configuradas.')
+      alert('Não deu pra salvar.\n\nMotivo: ' + motivoErro(err))
     } finally {
       setSalvando(false)
     }
@@ -221,15 +243,15 @@ export function Estoque() {
 
   async function excluirMaterial(id: string) {
     try { await api.del(`/api/materiais?id=${id}`); setConfirmandoId(null); reloadMat() }
-    catch (err) { console.error('[Excluir] erro:', err); alert('Não deu pra excluir.') }
+    catch (err) { console.error('[Excluir] erro:', err); alert('Não deu pra excluir.\n\nMotivo: ' + motivoErro(err)) }
   }
   async function excluirProduto(id: string) {
     try { await api.del(`/api/produtos-prontos?id=${id}`); setConfirmandoId(null); reloadProd() }
-    catch (err) { console.error('[Excluir] erro:', err); alert('Não deu pra excluir.') }
+    catch (err) { console.error('[Excluir] erro:', err); alert('Não deu pra excluir.\n\nMotivo: ' + motivoErro(err)) }
   }
   async function excluirPerda(id: string) {
     try { await api.del(`/api/perdas?id=${id}`); setConfirmandoId(null); reloadPerdas() }
-    catch (err) { console.error('[Excluir] erro:', err); alert('Não deu pra excluir.') }
+    catch (err) { console.error('[Excluir] erro:', err); alert('Não deu pra excluir.\n\nMotivo: ' + motivoErro(err)) }
   }
 
   return (
@@ -267,15 +289,29 @@ export function Estoque() {
           {matVazio ? (
             <Card><div className="text-center py-6 text-sm text-[var(--muted-foreground)]">Nenhum material cadastrado ainda. Clica em "Novo material" pra começar.</div></Card>
           ) : (
+          <>
+          <div className="relative mb-3 max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+            <input
+              value={buscaMat}
+              onChange={e => setBuscaMat(e.target.value)}
+              placeholder="Buscar por nome, código ou marca..."
+              className="w-full h-9 pl-8 pr-3 rounded-lg border border-[var(--border)] bg-[var(--card)] text-[13px] text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+            />
+          </div>
+          {materiaisFiltrados.length === 0 && (
+            <Card><div className="text-center py-6 text-sm text-[var(--muted-foreground)]">Nenhum material encontrado pra "{buscaMat}".</div></Card>
+          )}
           <div className="flex gap-4 flex-wrap">
-            {materiais.map(m => {
+            {materiaisFiltrados.map(m => {
               const pct = (m.estoqueG / m.capacidadeG) * 100
               const s = statusMaterial(pct, m.estoqueG, m.alertaEstoqueG)
               return (
                 <Card key={m.id} className="flex-1 min-w-[220px]">
                   <div className="flex justify-between items-start">
                     <div>
-                      <b className="text-sm">{m.nome}</b>
+                      {m.codigo && <span className="inline-flex items-center gap-1 font-mono text-[10px] font-bold bg-[var(--muted)] px-1.5 py-0.5 rounded mb-1"><Tag size={9} />{m.codigo}</span>}
+                      <div><b className="text-sm">{m.nome}</b></div>
                       {m.marca && <div className="text-[11px] text-[var(--muted-foreground)]">{m.marca}</div>}
                     </div>
                     <div className="flex items-center gap-2">
@@ -302,6 +338,7 @@ export function Estoque() {
               )
             })}
           </div>
+          </>
           )}
 
           <h2 className="text-[1.05rem] font-semibold mt-6 mb-3">Perdas / falhas de impressão</h2>
@@ -440,6 +477,18 @@ export function Estoque() {
       >
         {aba === 'materia' ? (
           <>
+            <Label>Código de referência</Label>
+            <div className="flex gap-2">
+              <Input placeholder="Ex: MAT-001" value={formMaterial.codigo} onChange={e => setFormMaterial(f => ({ ...f, codigo: e.target.value.toUpperCase() }))} />
+              <button
+                type="button"
+                onClick={() => setFormMaterial(f => ({ ...f, codigo: gerarProximoCodigoMaterial() }))}
+                title="Gerar código automático"
+                className="w-9 h-9 rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)] flex items-center justify-center flex-shrink-0 mb-3"
+              >
+                <RefreshCw size={14} />
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-x-4">
               <div><Label>Nome do material</Label><Input placeholder="Ex: PLA Azul" value={formMaterial.nome} onChange={e => setFormMaterial(f => ({ ...f, nome: e.target.value }))} /></div>
               <div><Label>Marca (opcional)</Label><Input placeholder="Ex: Voolt3D" value={formMaterial.marca} onChange={e => setFormMaterial(f => ({ ...f, marca: e.target.value }))} /></div>
@@ -538,7 +587,7 @@ export function Estoque() {
             setFormPerda(f => ({ ...f, material_id: materialId, custo: custoCalc ? custoCalc.toFixed(2).replace('.', ',') : f.custo }))
           }}
         >
-          {materiais.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+          {materiais.map(m => <option key={m.id} value={m.id}>{m.codigo ? `${m.codigo} — ` : ''}{m.nome}</option>)}
         </Select>
         <div className="grid grid-cols-2 gap-x-4">
           <div>
