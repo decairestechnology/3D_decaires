@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { Sun, Moon, Eye, EyeOff, Check } from 'lucide-react'
+import { Sun, Moon, Eye, EyeOff, Check, Plus, Trash2, Tag } from 'lucide-react'
+import { useApi } from '@/lib/useApi'
+import { api } from '@/lib/api'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Label, Input } from '@/components/ui/Input'
@@ -7,12 +9,39 @@ import { useTheme } from '@/context/ThemeContext'
 import { useValuesVisibility } from '@/context/ValuesVisibilityContext'
 import { carregarPreferencias, salvarPreferencias } from '@/lib/settings'
 
+interface TipoCodigoRow { id: string; prefixo: string; descricao: string }
+
 export function Configuracoes() {
   const { theme, toggleTheme } = useTheme()
   const { hideValues, toggleHideValues } = useValuesVisibility()
 
   const [prefs, setPrefs] = useState(carregarPreferencias())
   const [salvo, setSalvo] = useState(false)
+
+  const { data: tiposCodigo, error: tiposErro, reload: reloadTipos } = useApi<TipoCodigoRow[]>('/api/custos?tipo=codigos', [])
+  const [novoPrefixo, setNovoPrefixo] = useState('')
+  const [novaDescricao, setNovaDescricao] = useState('')
+  const [salvandoTipo, setSalvandoTipo] = useState(false)
+
+  function motivoErro(err: unknown): string {
+    const bruto = err instanceof Error ? err.message : String(err)
+    const m = bruto.match(/"error"\s*:\s*"([^"]+)"/)
+    return (m ? m[1] : bruto).slice(0, 300)
+  }
+  async function adicionarTipo() {
+    if (!novoPrefixo.trim() || !novaDescricao.trim()) return
+    setSalvandoTipo(true)
+    try {
+      await api.post('/api/custos?tipo=codigos', { prefixo: novoPrefixo, descricao: novaDescricao })
+      setNovoPrefixo(''); setNovaDescricao(''); reloadTipos()
+    } catch (err) {
+      alert('Não deu pra cadastrar o código.\n\nMotivo: ' + motivoErro(err))
+    } finally { setSalvandoTipo(false) }
+  }
+  async function excluirTipo(t: TipoCodigoRow) {
+    try { await api.del(`/api/custos?tipo=codigos&id=${t.id}`); reloadTipos() }
+    catch (err) { alert('Não deu pra excluir.\n\nMotivo: ' + motivoErro(err)) }
+  }
 
   function handleSalvar() {
     salvarPreferencias(prefs)
@@ -54,7 +83,43 @@ export function Configuracoes() {
         </Card>
       </div>
 
-      <Card className="mt-4 max-w-[420px]">
+      <div className="flex gap-4 flex-wrap items-start">
+      <Card className="mt-4 flex-1 min-w-[300px] max-w-[420px] order-2">
+        <div className="text-xs font-bold text-[var(--muted-foreground)] mb-1">CÓDIGOS DE MATERIAL</div>
+        <div className="text-xs text-[var(--muted-foreground)] mb-3">
+          Cada tipo de material extra ganha um prefixo. Ao cadastrar em Custos → Materiais extras você escolhe o tipo e o número sai sozinho (CHV-001, CHV-002...).
+        </div>
+        <div className="flex items-center gap-2 py-1.5 text-[13px] border-b border-[var(--border)]">
+          <span className="inline-flex items-center gap-1 font-mono text-xs font-bold bg-[var(--muted)] px-2 py-1 rounded"><Tag size={11} />FIL</span>
+          <span className="flex-1">Filamento</span><span className="text-[11px] text-[var(--muted-foreground)]">fixo</span>
+        </div>
+        <div className="flex items-center gap-2 py-1.5 text-[13px] border-b border-[var(--border)]">
+          <span className="inline-flex items-center gap-1 font-mono text-xs font-bold bg-[var(--muted)] px-2 py-1 rounded"><Tag size={11} />PRD</span>
+          <span className="flex-1">Produto do catálogo</span><span className="text-[11px] text-[var(--muted-foreground)]">fixo</span>
+        </div>
+        {tiposCodigo.map(t => (
+          <div key={t.id} className="flex items-center gap-2 py-1.5 text-[13px] border-b border-[var(--border)]">
+            <span className="inline-flex items-center gap-1 font-mono text-xs font-bold bg-[var(--muted)] px-2 py-1 rounded"><Tag size={11} />{t.prefixo}</span>
+            <span className="flex-1">{t.descricao}</span>
+            <button onClick={() => excluirTipo(t)} title="Excluir tipo" className="w-7 h-7 rounded flex items-center justify-center text-[var(--muted-foreground)] hover:bg-red-50 hover:text-red-600"><Trash2 size={13} /></button>
+          </div>
+        ))}
+        {tiposErro && (
+          <div className="text-xs text-red-600 mt-2">Não deu pra carregar os códigos — confere se a migração 025 foi rodada no Neon.</div>
+        )}
+        <div className="grid grid-cols-[90px_1fr] gap-x-2 mt-3">
+          <div><Label>Prefixo</Label><Input placeholder="CHV" maxLength={6} value={novoPrefixo} onChange={e => setNovoPrefixo(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} /></div>
+          <div><Label>Descrição</Label><Input placeholder="Chaveiros" value={novaDescricao} onChange={e => setNovaDescricao(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') adicionarTipo() }} /></div>
+        </div>
+        <Button variant="primary" disabled={salvandoTipo || !novoPrefixo.trim() || !novaDescricao.trim()} onClick={adicionarTipo}>
+          <Plus size={15} />{salvandoTipo ? 'Salvando...' : 'Adicionar código'}
+        </Button>
+        <div className="text-xs text-[var(--muted-foreground)] mt-2">
+          Excluir um tipo não mexe nos materiais que já usam esse código.
+        </div>
+      </Card>
+
+      <Card className="mt-4 flex-1 min-w-[300px] max-w-[420px] order-1">
         <div className="text-xs font-bold text-[var(--muted-foreground)] mb-3">PADRÕES DO ORÇAMENTO</div>
         <Label>Margem de lucro padrão (%)</Label>
         <Input value={prefs.margemPadrao} onChange={e => setPrefs(p => ({ ...p, margemPadrao: e.target.value }))} />
@@ -85,6 +150,7 @@ export function Configuracoes() {
           Esses valores viram o ponto de partida toda vez que você abrir a tela de Orçamento.
         </div>
       </Card>
+      </div>
     </div>
   )
 }
