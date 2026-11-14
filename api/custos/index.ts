@@ -13,36 +13,70 @@ function pegarParam(req: VercelRequest, nome: string): string | undefined {
   return Array.isArray(v) ? v[0] : v
 }
 
-// Rota combinada: ?tipo=extras (materiais extras) ou ?tipo=operacionais (custos fixos)
+// Rota combinada: ?tipo=extras (materiais extras), ?tipo=operacionais (custos fixos)
+// ou ?tipo=codigos (prefixos de código cadastrados em Configurações)
 // Feito assim pra não estourar o limite de 12 funções serverless do plano Hobby da Vercel.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store')
   const id = pegarParam(req, 'id')
   const tipo = pegarParam(req, 'tipo') ?? 'extras'
 
-  if (tipo !== 'extras' && tipo !== 'operacionais') {
-    return res.status(400).json({ error: 'tipo inválido — use "extras" ou "operacionais"' })
+  if (tipo !== 'extras' && tipo !== 'operacionais' && tipo !== 'codigos') {
+    return res.status(400).json({ error: 'tipo inválido — use "extras", "operacionais" ou "codigos"' })
   }
 
   try {
+    if (tipo === 'codigos') {
+      if (req.method === 'GET') {
+        const linhas = await sql`SELECT * FROM tipos_codigo ORDER BY prefixo`
+        return res.status(200).json(linhas)
+      }
+      if (req.method === 'POST') {
+        const prefixo = String(req.body?.prefixo ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+        const descricao = String(req.body?.descricao ?? '').trim()
+        if (prefixo.length < 2 || prefixo.length > 6) return res.status(400).json({ error: 'O prefixo precisa ter de 2 a 6 letras ou números (ex: CHV).' })
+        if (!descricao) return res.status(400).json({ error: 'Informe a descrição (ex: Chaveiros).' })
+        if (prefixo === 'FIL' || prefixo === 'PRD') return res.status(409).json({ error: `${prefixo} já é usado pelo sistema (FIL = filamento, PRD = produto do catálogo).` })
+        const [dup] = await sql`SELECT descricao FROM tipos_codigo WHERE prefixo = ${prefixo}`
+        if (dup) return res.status(409).json({ error: `O prefixo ${prefixo} já está cadastrado como "${dup.descricao}".` })
+        const [novo] = await sql`INSERT INTO tipos_codigo (prefixo, descricao) VALUES (${prefixo}, ${descricao}) RETURNING *`
+        return res.status(201).json(novo)
+      }
+      if (req.method === 'DELETE' && id) {
+        await sql`DELETE FROM tipos_codigo WHERE id = ${id}`
+        return res.status(204).end()
+      }
+    }
+
     if (tipo === 'extras') {
       if (req.method === 'GET') {
         const linhas = await sql`SELECT * FROM materiais_extras ORDER BY nome`
         return res.status(200).json(linhas)
       }
       if (req.method === 'POST') {
-        const { nome, unidade, quantidade, quantidade_usada, custo_total, alerta_estoque_baixo, observacoes } = req.body
+        const { nome, unidade, quantidade, quantidade_usada, custo_total, alerta_estoque_baixo, observacoes, codigo } = req.body
+        const cod = typeof codigo === 'string' && codigo.trim() ? codigo.trim().toUpperCase() : null
+        if (cod) {
+          const [dup] = await sql`SELECT nome FROM materiais_extras WHERE codigo = ${cod}`
+          if (dup) return res.status(409).json({ error: `O código ${cod} já está em uso em "${dup.nome}".` })
+        }
         const [novo] = await sql`
-          INSERT INTO materiais_extras (nome, unidade, quantidade, quantidade_usada, custo_total, alerta_estoque_baixo, observacoes)
-          VALUES (${nome}, ${unidade ?? 'un'}, ${quantidade ?? 0}, ${quantidade_usada ?? 0}, ${custo_total ?? 0}, ${alerta_estoque_baixo ?? 0}, ${observacoes ?? null})
+          INSERT INTO materiais_extras (nome, unidade, quantidade, quantidade_usada, custo_total, alerta_estoque_baixo, observacoes, codigo)
+          VALUES (${nome}, ${unidade ?? 'un'}, ${quantidade ?? 0}, ${quantidade_usada ?? 0}, ${custo_total ?? 0}, ${alerta_estoque_baixo ?? 0}, ${observacoes ?? null}, ${cod})
           RETURNING *
         `
         return res.status(201).json(novo)
       }
       if (req.method === 'PATCH' && id) {
-        const { nome, unidade, quantidade, quantidade_usada, custo_total, alerta_estoque_baixo, observacoes } = req.body
+        const { nome, unidade, quantidade, quantidade_usada, custo_total, alerta_estoque_baixo, observacoes, codigo } = req.body
+        const cod = typeof codigo === 'string' && codigo.trim() ? codigo.trim().toUpperCase() : null
+        if (cod) {
+          const [dup] = await sql`SELECT nome FROM materiais_extras WHERE codigo = ${cod} AND id <> ${id}`
+          if (dup) return res.status(409).json({ error: `O código ${cod} já está em uso em "${dup.nome}".` })
+        }
         const [atualizado] = await sql`
           UPDATE materiais_extras SET
+            codigo = COALESCE(${cod}, codigo),
             nome = COALESCE(${nome}, nome), unidade = COALESCE(${unidade}, unidade),
             quantidade = COALESCE(${quantidade}, quantidade),
             quantidade_usada = COALESCE(${quantidade_usada}, quantidade_usada),
