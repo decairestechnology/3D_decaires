@@ -29,7 +29,7 @@ const tituloMov: Record<TipoMov, string> = {
   atualizar_saldo: 'Atualizar saldo'
 }
 
-const formInvVazio = { id: '', nome: '', banco: '', tipo: 'cdb', observacoes: '', saldo_inicial: '', ativo: true }
+const formInvVazio = { id: '', nome: '', banco: '', tipo: 'cdb', observacoes: '', saldo_inicial: '', data_aplicacao: '', saldo_atual: '', ativo: true }
 const formMovVazio = { investimentoId: '', tipo: 'aplicacao' as TipoMov, valor: '', data: '', afetaCaixa: true, descricao: '' }
 
 interface Props {
@@ -58,6 +58,7 @@ export function AbaInvestimentos({ investimentos, movimentos, saldoCaixa, erroCa
   const rendimentoMes = movimentos
     .filter(m => m.tipo === 'rendimento' && m.data.slice(0, 7) === mesAtual)
     .reduce((s, m) => s + Number(m.valor), 0)
+  /** Bruto investido = tudo que você colocou menos o que tirou (sem contar rendimento). */
   const aplicadoLiquido = investimentos.reduce((s, i) => s + Number(i.total_aplicado) - Number(i.total_resgatado), 0)
   const pctRendimento = aplicadoLiquido > 0 ? (totalRendimento / aplicadoLiquido) * 100 : 0
 
@@ -78,11 +79,11 @@ export function AbaInvestimentos({ investimentos, movimentos, saldoCaixa, erroCa
   const historico = movimentos.filter(m => !filtroHistorico || m.investimento_id === filtroHistorico)
 
   function abrirNovoInvestimento() {
-    setFormInv({ ...formInvVazio })
+    setFormInv({ ...formInvVazio, data_aplicacao: hojeLocal() })
     setModalInv(true)
   }
   function abrirEdicaoInvestimento(i: InvestimentoApiRow) {
-    setFormInv({ id: i.id, nome: i.nome, banco: i.banco ?? '', tipo: i.tipo, observacoes: i.observacoes ?? '', saldo_inicial: '', ativo: i.ativo })
+    setFormInv({ ...formInvVazio, id: i.id, nome: i.nome, banco: i.banco ?? '', tipo: i.tipo, observacoes: i.observacoes ?? '', ativo: i.ativo })
     setModalInv(true)
   }
   function abrirMovimento(i: InvestimentoApiRow, tipo: TipoMov) {
@@ -100,9 +101,13 @@ export function AbaInvestimentos({ investimentos, movimentos, saldoCaixa, erroCa
         })
       } else {
         const inicial = lerValor(formInv.saldo_inicial)
+        const atual = lerValor(formInv.saldo_atual)
         await api.post('/api/lancamentos?recurso=investimentos', {
           nome: formInv.nome, banco: formInv.banco, tipo: formInv.tipo, observacoes: formInv.observacoes,
-          saldo_inicial: inicial > 0 ? inicial : 0, data: hojeLocal()
+          saldo_inicial: inicial > 0 ? inicial : 0,
+          data: formInv.data_aplicacao || hojeLocal(),
+          saldo_atual: atual > 0 ? atual : null,
+          data_saldo_atual: hojeLocal()
         })
       }
       setModalInv(false)
@@ -195,9 +200,14 @@ export function AbaInvestimentos({ investimentos, movimentos, saldoCaixa, erroCa
         ) : (
           <>
             <div className="text-2xl font-extrabold mt-3"><Money value={saldo} /></div>
-            <div className="text-xs text-[var(--muted-foreground)] mt-0.5">
-              rendeu <span className={rendeu >= 0 ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-red-600 font-semibold'}>{formatMoney(rendeu)}</span>
-              {base > 0 && <> ({pct.toFixed(2).replace('.', ',')}%)</>}
+            <div className="text-[11px] text-[var(--muted-foreground)]">saldo hoje{i.primeiro_movimento ? ` · investindo desde ${formatarDataBR(i.primeiro_movimento)}` : ''}</div>
+            <div className="mt-2.5 rounded-lg bg-[var(--muted)] px-3 py-2 text-[12.5px] space-y-1">
+              <div className="flex justify-between"><span className="text-[var(--muted-foreground)]">Valor aplicado</span><Money value={base} className="font-semibold" /></div>
+              <div className="flex justify-between">
+                <span className="text-[var(--muted-foreground)]">Rendeu{base > 0 ? ` (${pct.toFixed(2).replace('.', ',')}%)` : ''}</span>
+                <span className={`font-semibold ${rendeu >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'}`}>{rendeu >= 0 ? '+ ' : '− '}<Money value={Math.abs(rendeu)} /></span>
+              </div>
+              <div className="flex justify-between border-t border-[var(--border)] pt-1"><span className="font-semibold">Saldo</span><Money value={saldo} className="font-bold" /></div>
             </div>
             {i.ativo && diasSemAtualizar !== null && diasSemAtualizar > 30 && (
               <div className="text-[11px] text-amber-700 mt-1.5 flex items-center gap-1"><RefreshCw size={11} />Sem atualizar há {diasSemAtualizar} dias</div>
@@ -220,14 +230,19 @@ export function AbaInvestimentos({ investimentos, movimentos, saldoCaixa, erroCa
     <div>
       <div className="flex gap-4 flex-wrap">
         <Card className="flex-1 min-w-[180px]">
-          <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><PiggyBank size={14} />Total investido</div>
-          <div className="text-xl font-extrabold"><Money value={totalInvestido} /></div>
-          <div className="text-xs text-[var(--muted-foreground)] mt-1">{ativos.length} investimento(s) ativo(s)</div>
+          <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><ArrowDownToLine size={14} />Valor aplicado (bruto)</div>
+          <div className="text-xl font-extrabold"><Money value={aplicadoLiquido} /></div>
+          <div className="text-xs text-[var(--muted-foreground)] mt-1">o que você colocou, sem rendimento</div>
         </Card>
         <Card className="flex-1 min-w-[180px]">
           <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><TrendingUp size={14} />Rendeu até hoje</div>
           <div className={`text-xl font-extrabold ${totalRendimento >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'}`}><Money value={totalRendimento} /></div>
-          <div className="text-xs text-[var(--muted-foreground)] mt-1">{pctRendimento.toFixed(2).replace('.', ',')}% sobre o que você aplicou</div>
+          <div className="text-xs text-[var(--muted-foreground)] mt-1">{pctRendimento.toFixed(2).replace('.', ',')}% sobre o valor aplicado</div>
+        </Card>
+        <Card className="flex-1 min-w-[180px]">
+          <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><PiggyBank size={14} />Saldo hoje</div>
+          <div className="text-xl font-extrabold text-violet-700 dark:text-violet-400"><Money value={totalInvestido} /></div>
+          <div className="text-xs text-[var(--muted-foreground)] mt-1">aplicado + rendimento · {ativos.length} ativo(s)</div>
         </Card>
         <Card className="flex-1 min-w-[180px]">
           <div className="text-xs font-semibold text-[var(--muted-foreground)] flex items-center gap-1.5 mb-2"><TrendingUp size={14} />Rendeu neste mês</div>
@@ -370,13 +385,29 @@ export function AbaInvestimentos({ investimentos, movimentos, saldoCaixa, erroCa
           </div>
         </div>
         {!formInv.id && (
-          <>
-            <Label>Saldo que já está investido (opcional)</Label>
-            <Input placeholder="0,00" value={formInv.saldo_inicial} onChange={e => setFormInv(f => ({ ...f, saldo_inicial: e.target.value }))} />
-            <div className="text-[11px] text-[var(--muted-foreground)] -mt-2 mb-3">
-              Pra dinheiro que já estava aplicado antes de usar o sistema. Entra no investimento sem sair do caixa.
+          <div className="bg-[var(--muted)] rounded-lg p-3 mb-3">
+            <div className="text-[13px] font-semibold mb-0.5">Já tem dinheiro aplicado aqui? (opcional)</div>
+            <div className="text-[11px] text-[var(--muted-foreground)] mb-2.5">
+              Pra dinheiro aplicado antes de usar o sistema. Entra no investimento sem sair do caixa. Novos aportes você faz depois pelo botão “Aplicar”.
             </div>
-          </>
+            <div className="grid grid-cols-2 gap-x-3">
+              <div><Label>Quanto você aplicou (R$)</Label><Input className="!bg-[var(--card)]" placeholder="0,00" value={formInv.saldo_inicial} onChange={e => setFormInv(f => ({ ...f, saldo_inicial: e.target.value }))} /></div>
+              <div><Label>Dia que investiu</Label><Input className="!bg-[var(--card)]" type="date" value={formInv.data_aplicacao} onChange={e => setFormInv(f => ({ ...f, data_aplicacao: e.target.value }))} /></div>
+            </div>
+            <Label>Saldo hoje no banco (R$)</Label>
+            <Input className="!bg-[var(--card)]" placeholder="Deixa vazio se ainda não rendeu" value={formInv.saldo_atual} onChange={e => setFormInv(f => ({ ...f, saldo_atual: e.target.value }))} />
+            {(() => {
+              const ap = lerValor(formInv.saldo_inicial)
+              const at = lerValor(formInv.saldo_atual)
+              if (!(ap > 0) || !(at > 0)) return null
+              const r = at - ap
+              return (
+                <div className="text-[12px] bg-[var(--card)] border border-[var(--border)] rounded-md px-2.5 py-2 -mt-1">
+                  Aplicado <b>{formatMoney(ap)}</b> + rendeu <b className={r >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600'}>{formatMoney(r)}</b> = saldo <b>{formatMoney(at)}</b>
+                </div>
+              )
+            })()}
+          </div>
         )}
         <Label>Observações</Label>
         <Input placeholder="Ex: 100% do CDI, liquidez diária" value={formInv.observacoes} onChange={e => setFormInv(f => ({ ...f, observacoes: e.target.value }))} />
