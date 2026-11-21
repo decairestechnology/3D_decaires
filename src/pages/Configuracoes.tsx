@@ -8,6 +8,7 @@ import { Label, Input } from '@/components/ui/Input'
 import { useTheme } from '@/context/ThemeContext'
 import { useValuesVisibility } from '@/context/ValuesVisibilityContext'
 import { carregarPreferencias, salvarPreferencias } from '@/lib/settings'
+import { CardCategorias } from '@/pages/financeiro/CardCategorias'
 
 interface TipoCodigoRow { id: string; prefixo: string; descricao: string }
 
@@ -118,6 +119,8 @@ export function Configuracoes() {
           Excluir um tipo não mexe nos materiais que já usam esse código.
         </div>
       </Card>
+
+      <CardCategorias className="order-3" />
 
       <Card className="mt-4 flex-1 min-w-[300px] max-w-[420px] order-1">
         <div className="text-xs font-bold text-[var(--muted-foreground)] mb-3">PADRÕES DO ORÇAMENTO</div>
