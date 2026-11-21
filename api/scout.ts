@@ -25,6 +25,7 @@ async function buscarContexto() {
         COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END), 0) as receita,
         COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END), 0) as despesa
       FROM lancamentos_financeiros
+      WHERE COALESCE(status, 'pago') = 'pago'
     `
     const materiaisBaixos = await sql`
       SELECT nome, estoque_g, capacidade_g FROM materiais WHERE estoque_g::float / capacidade_g <= 0.2
