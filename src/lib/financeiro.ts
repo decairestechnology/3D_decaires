@@ -57,6 +57,7 @@ export interface InvestimentoApiRow {
   id: string; nome: string; banco: string | null; tipo: string; observacoes: string | null; ativo: boolean
   saldo: string; total_aplicado: string; total_resgatado: string; total_rendimento: string
   ultimo_movimento: string | null
+  primeiro_movimento?: string | null
 }
 
 export interface MovimentoApiRow {
