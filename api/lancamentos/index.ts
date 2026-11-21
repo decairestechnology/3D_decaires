@@ -184,7 +184,8 @@ async function investimentos(req: VercelRequest, res: VercelResponse, id?: strin
         COALESCE(SUM(CASE WHEN m.tipo = 'aplicacao' THEN m.valor ELSE 0 END), 0) AS total_aplicado,
         COALESCE(SUM(CASE WHEN m.tipo = 'resgate' THEN m.valor ELSE 0 END), 0) AS total_resgatado,
         COALESCE(SUM(CASE WHEN m.tipo = 'rendimento' THEN m.valor ELSE 0 END), 0) AS total_rendimento,
-        MAX(m.data) AS ultimo_movimento
+        MAX(m.data) AS ultimo_movimento,
+        MIN(m.data) AS primeiro_movimento
       FROM investimentos i
       LEFT JOIN investimento_movimentos m ON m.investimento_id = i.id
       GROUP BY i.id
@@ -201,13 +202,23 @@ async function investimentos(req: VercelRequest, res: VercelResponse, id?: strin
       VALUES (${b.nome}, ${b.banco || null}, ${b.tipo || 'outro'}, ${b.observacoes || null})
       RETURNING *
     `
-    // Dinheiro que já estava investido antes do sistema: entra sem mexer no caixa.
+    // Dinheiro que já estava investido antes do sistema: entra sem mexer no caixa,
+    // na data em que você aplicou.
     const inicial = numero(b.saldo_inicial)
     if (inicial > 0) {
       await sql`
         INSERT INTO investimento_movimentos (investimento_id, tipo, valor, data, afeta_caixa, descricao)
         VALUES (${novo.id}, 'aplicacao', ${inicial}, ${String(b.data || hoje()).slice(0, 10)}, false, 'Saldo inicial')
       `
+      // Se informou quanto está hoje no banco, a diferença já entra como rendimento.
+      const atual = numero(b.saldo_atual)
+      const rendeu = Math.round((atual - inicial) * 100) / 100
+      if (Number.isFinite(atual) && atual > 0 && rendeu !== 0) {
+        await sql`
+          INSERT INTO investimento_movimentos (investimento_id, tipo, valor, data, afeta_caixa, descricao)
+          VALUES (${novo.id}, 'rendimento', ${rendeu}, ${String(b.data_saldo_atual || hoje()).slice(0, 10)}, false, 'Atualização de saldo')
+        `
+      }
     }
     return res.status(201).json(novo)
   }
